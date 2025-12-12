@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package filemanager.ipfsstorage.v1;
+
+// Encrypted manifest with recipient key wrapping
+message ManifestEnvelope {
+  // Encrypted RootManifest bytes
+  bytes encrypted_manifest = 1;
+  // One wrapped key per recipient device/user
+  repeated RecipientKey recipients = 2;
+}
+
+// Wrapped symmetric key for a single recipient
+message RecipientKey {
+  // Recipient's X25519 public key (32 bytes)
+  bytes recipient_public_key = 1;
+  // Nonce used for crypto_box (24 bytes)
+  bytes nonce = 2;
+  // Encrypted manifest key (48 bytes: 32 key + 16 auth tag)
+  bytes ciphertext = 3;
+  // Sender's X25519 public key (32 bytes)
+  bytes sender_public_key = 4;
+  // Optional device/user label (e.g., "MacBook Pro", "iPhone")
+  string label = 5;
+}
+
+// Root manifest containing directory structure and file index
+message RootManifest {
+  // All directories in the batch
+  repeated DirectoryRecord directories = 1;
+  // Files in root manifest (may be empty if using sub-manifests)
+  repeated FileRecord files = 2;
+  // Sub-manifest references for large batches
+  repeated SubManifestIndex sub_manifests = 3;
+  // Batch creation timestamp (Unix ms)
+  uint64 created = 4;
+}
+
+// Index entry for a sub-manifest (for batches with many files)
+message SubManifestIndex {
+  // Sub-manifest filename (e.g., "m_0", "m_1")
+  string manifest_id = 1;
+  // First file path in this sub-manifest (sorted)
+  string start_path = 2;
+  // Last file path in this sub-manifest (sorted)
+  string end_path = 3;
+  // Number of files in this sub-manifest
+  uint32 file_count = 4;
+}
+
+// Sub-manifest containing a portion of file records
+message SubManifest {
+  // Files in this sub-manifest (sorted by path)
+  repeated FileRecord files = 1;
+}
+
+// Directory entry in the batch
+message DirectoryRecord {
+  // Full path (e.g., "/photos/2024")
+  string path = 1;
+  // Directory name (e.g., "2024")
+  string name = 2;
+  // Creation timestamp (Unix ms)
+  uint64 created = 3;
+}
+
+// File entry in the batch
+message FileRecord {
+  // Full path (e.g., "/photos/2024/img.jpg")
+  string path = 1;
+  // Filename (e.g., "img.jpg")
+  string name = 2;
+  // Original file size in bytes
+  uint64 size = 3;
+  // BLAKE2b content hash (32 bytes)
+  bytes content_hash = 4;
+  // Chunk references for this file
+  repeated FileChunk chunks = 5;
+  // Creation timestamp (Unix ms)
+  uint64 created = 6;
+}
+
+// Chunk reference within a file
+message FileChunk {
+  // Unique chunk identifier (base58, 22 chars)
+  string chunk_id = 1;
+  // IPFS CID of encrypted chunk
+  string cid = 2;
+  // Byte offset within decrypted chunk
+  uint32 offset = 3;
+  // Length of file data in this chunk
+  uint32 length = 4;
+  // Encryption method used
+  ChunkEncryption encryption = 5;
+}
+
+// Chunk encryption method
+enum ChunkEncryption {
+  // Default: single-shot encryption for chunks <= 10MB
+  CHUNK_ENCRYPTION_SINGLE_SHOT = 0;
+  // Streaming encryption for larger chunks
+  CHUNK_ENCRYPTION_STREAMING = 1;
+}
