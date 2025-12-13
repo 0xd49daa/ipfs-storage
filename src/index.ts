@@ -95,3 +95,18 @@ export {
   buildDirectoryTree,
   type BuildDirectoryTreeOptions,
 } from './directories.ts';
+
+// PADME padding (Phase 6)
+export { padme, padmeWithDetails } from './padme.ts';
+export type { PadmeResult } from './padme.ts';
+
+// Chunk planning (Phase 6)
+export { planChunks } from './chunk-plan.ts';
+export type {
+  FileSegment,
+  PlannedChunk,
+  PlannedChunkRef,
+  PlannedFile,
+  ChunkPlan,
+  PlanChunksOptions,
+} from './chunk-plan.ts';
