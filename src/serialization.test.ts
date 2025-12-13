@@ -142,6 +142,7 @@ describe('Phase 1: Serialization', () => {
                 offset: 0,
                 length: 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
+                encryptedLength: 1024 * 1024 + 40,
               },
             ],
             created: 1700000000000,
@@ -162,6 +163,7 @@ describe('Phase 1: Serialization', () => {
       expect(decoded.files[0].path).toBe('/photos/2024/img.jpg');
       expect(decoded.files[0].size).toBe(1024 * 1024);
       expect(decoded.files[0].contentHash).toEqual(contentHash);
+      expect(decoded.files[0].chunks[0]!.encryptedLength).toBe(1024 * 1024 + 40);
       expect(decoded.files[0].chunks.length).toBe(1);
       expect(decoded.files[0].chunks[0].chunkId).toBe('6Bv7HnWcL4mT9Rp2QsXx3a');
       expect(decoded.files[0].chunks[0].encryption).toBe(
@@ -235,6 +237,7 @@ describe('Phase 1: Serialization', () => {
                 offset: 0,
                 length: 10 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
+                encryptedLength: 10 * 1024 * 1024 + 40,
               },
               {
                 chunkId: 'chunk2chunk2chunk2chun',
@@ -242,6 +245,7 @@ describe('Phase 1: Serialization', () => {
                 offset: 0,
                 length: 10 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
+                encryptedLength: 10 * 1024 * 1024 + 40,
               },
               {
                 chunkId: 'chunk3chunk3chunk3chun',
@@ -249,6 +253,7 @@ describe('Phase 1: Serialization', () => {
                 offset: 0,
                 length: 5 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
+                encryptedLength: 5 * 1024 * 1024 + 40,
               },
             ],
             created: 1700000000000,
@@ -282,6 +287,7 @@ describe('Phase 1: Serialization', () => {
                 offset: 0,
                 length: 100,
                 encryption: ChunkEncryption.STREAMING,
+                encryptedLength: 100 + 24 + 17, // 100 + header + 1 chunk overhead
               },
             ],
             created: 1700000000000,
@@ -337,6 +343,7 @@ describe('Phase 1: Serialization', () => {
               offset: 0,
               length: 1000 + i,
               encryption: ChunkEncryption.SINGLE_SHOT,
+              encryptedLength: 1000 + i + 40,
             },
           ],
           created: 1700000000000 + i,
@@ -402,6 +409,7 @@ describe('Phase 1: Serialization', () => {
               offset: 0,
               length: 100,
               encryption: ChunkEncryption.SINGLE_SHOT,
+              encryptedLength: 140,
             },
           ],
           created: 1700000000000,

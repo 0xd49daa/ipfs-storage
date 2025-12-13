@@ -208,6 +208,7 @@ function chunkRefToProto(ref: ChunkRef): FileChunk {
     offset: ref.offset,
     length: ref.length,
     encryption: ref.encryption,
+    encryptedLength: ref.encryptedLength,
   });
 }
 
@@ -260,6 +261,7 @@ function chunkProtoToRef(proto: FileChunk): ChunkRef {
     offset: proto.offset,
     length: proto.length,
     encryption: proto.encryption,
+    encryptedLength: proto.encryptedLength,
   };
 }
 

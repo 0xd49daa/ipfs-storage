@@ -237,53 +237,104 @@ This plan breaks down the implementation into logical phases, ordered by depende
 
 ---
 
-## Phase 6: Chunk Aggregation Engine
+## Phase 6: Chunk Aggregation Engine ✅
+
+**Status:** Complete
 
 **Goal:** Implement the core chunking logic that combines small files and splits large files.
 
 **Tasks:**
-1. Implement file sorting/ordering for deterministic chunking
-2. Build aggregation algorithm: accumulate small files until ~10MB boundary
-3. Implement large file splitting into 10MB chunks
-4. Track `offset` and `length` for each file segment within chunks
-5. Generate `FileChunk` records with chunk boundaries
-6. Apply PADME padding to the final physical chunk
+1. ✅ Implement file ordering for deterministic chunking (input array order, caller controls sorting)
+2. ✅ Build aggregation algorithm: accumulate small files until ~10MB boundary
+3. ✅ Implement large file splitting into 10MB chunks
+4. ✅ Track `offset` and `length` for each file segment within chunks
+5. ✅ Generate `PlannedChunkRef` records with chunk boundaries
+6. ✅ Apply PADME padding to the final physical chunk
+7. ✅ Dynamic encryption mode selection (SINGLE_SHOT vs STREAMING based on chunk size)
+8. ✅ Input validation (array alignment, path format, chunkSize > 0)
 
 **Deliverables:**
-- `ChunkPlan` type describing chunk composition
-- `planChunks()` function that produces chunk plan from `FileInput[]`
-- PADME padding utility
+- ✅ `ChunkPlan` type describing chunk composition
+- ✅ `planChunks()` function that produces chunk plan from `FileInput[]`
+- ✅ PADME padding utilities (`padme()`, `padmeWithDetails()`)
+- ✅ Supporting types: `FileSegment`, `PlannedChunk`, `PlannedChunkRef`, `PlannedFile`, `PlanChunksOptions`
 
-**Testing:**
-- Small files correctly aggregated
-- Large files split at 10MB boundaries
-- Files spanning multiple chunks have correct offsets
-- PADME padding applied only to final chunk
-- Empty files produce no chunks
+**Files Created:**
+- `src/padme.ts` — PADME padding algorithm (≤12% overhead, mantissa/exponent masking)
+- `src/padme.test.ts` — 20 unit tests
+- `src/chunk-plan.ts` — Chunk planning types and `planChunks()` function
+- `src/chunk-plan.test.ts` — 35 unit tests
+
+**Files Modified:**
+- `src/index.ts` — Exported Phase 6 types and functions
+
+**Testing:** 55 tests passing
+- ✅ PADME: zero/tiny sizes unchanged, overhead caps (12% max), determinism, idempotency
+- ✅ Validation: array alignment, invalid paths, chunkSize <= 0 rejected
+- ✅ Empty files: produce no chunks, manifest entry only
+- ✅ Small file aggregation: combine until ~10MB, track offsets
+- ✅ Large file splitting: 10MB chunks, correct segment boundaries
+- ✅ Spec example: a.txt(1MB) + b.txt(2MB) + c.txt(9MB) + d.txt(25MB) → 5 chunks
+- ✅ PADME padding applied only to final chunk
+- ✅ Encryption mode: SINGLE_SHOT for ≤10MB, STREAMING for >10MB
+- ✅ Chunk ref consistency with chunk encryption
 
 ---
 
-## Phase 7: Chunk Encryption Pipeline
+## Phase 7: Chunk Encryption Pipeline ✅
 
-**Goal:** Encrypt chunks using the appropriate encryption strategy.
+**Status:** Complete
+
+**Goal:** Encrypt chunks using per-segment encryption with file-derived keys.
 
 **Tasks:**
-1. Implement `encryptChunk()` for single-shot encryption (≤10MB)
-2. Implement streaming encryption wrapper for larger chunks (future-proofing)
-3. Derive file keys per content hash using `deriveFileKey()`
-4. Handle chunk boundaries and byte slicing
-5. Track `ChunkEncryption` enum value per chunk
+1. ✅ Implement `encryptChunk()` for single-shot encryption (≤10MB)
+2. ✅ Implement streaming encryption for larger segments (>10MB)
+3. ✅ Derive file keys per content hash using `deriveFileKey(manifestKey, contentHash)`
+4. ✅ Handle per-segment encryption within aggregated chunks
+5. ✅ Track `ChunkEncryption` enum value per chunk
+6. ✅ Apply PADME padding to final chunk's last segment
+7. ✅ Store `encryptedLength` per segment for exact ciphertext extraction
+8. ✅ Add AbortSignal support with multiple checkpoints
 
 **Deliverables:**
-- `encryptChunk()` function
-- Encryption mode selection logic
-- Key derivation integration
+- ✅ `encryptChunk()` and `encryptChunks()` functions
+- ✅ `createFileDataProvider()` for file access with bounds checking
+- ✅ `computeEncryptedLength()` (deprecated for extraction, use `encryptedLength` field)
+- ✅ `decryptSingleShot()` and `decryptStreaming()` helpers
+- ✅ `EncryptedChunk`, `EncryptedSegmentInfo`, `FileDataProvider` types
+- ✅ Updated `ChunkRef` schema with `encryptedLength` field (proto + TS)
 
-**Testing:**
-- Single-shot encryption produces valid ciphertext
-- Decryption recovers original bytes
-- Different content hashes produce different file keys
-- Same content hash within batch produces same file key
+**Files Created:**
+- `src/chunk-encrypt.ts` — Per-segment encryption pipeline (486 lines)
+- `src/chunk-encrypt.test.ts` — 38 unit tests
+
+**Files Modified:**
+- `src/constants.ts` — Added encryption constants (NONCE_SIZE, AUTH_TAG_SIZE, SINGLE_SHOT_OVERHEAD, STREAM_HEADER_SIZE, STREAM_CHUNK_OVERHEAD, STREAM_CHUNK_SIZE)
+- `proto/manifest.proto` — Added `encrypted_length` field to `FileChunk` message
+- `src/types.ts` — Added `encryptedLength` to `ChunkRef` interface
+- `src/serialization.ts` — Updated converters for `encryptedLength`
+- `src/serialization.test.ts` — Updated test data with `encryptedLength`
+- `src/index.ts` — Exported Phase 7 types and functions
+
+**Testing:** 38 tests passing
+- ✅ `computeEncryptedLength()` formulas for SINGLE_SHOT and STREAMING
+- ✅ `FileDataProvider` bounds checking (invalid index, offset, length)
+- ✅ Single-shot round-trip: encrypt → decrypt → verify
+- ✅ Streaming round-trip: with/without padding, exact boundary
+- ✅ Multi-segment chunks: each segment uses correct derived key
+- ✅ Encrypted offsets cumulative and correct
+- ✅ PADME padding: `plaintextLength` = original, `encryptedLength` = padded
+- ✅ Invariant validation: `paddedSize >= dataSize`
+- ✅ AbortSignal cancellation at multiple checkpoints
+- ✅ Generator yields chunks in order
+- ✅ Integration: aggregated files decrypt with segment boundaries
+
+**Key Design Decisions:**
+- Per-segment encryption: each file segment encrypted with `deriveFileKey(manifestKey, contentHash)`
+- `encryptedLength` stored per segment (not computed) to handle PADME padding correctly
+- `STREAM_CHUNK_SIZE` locked at 64KB (not configurable) for encrypt/decrypt consistency
+- Download uses `ref.encryptedLength` for extraction, not `computeEncryptedLength(ref.length)`
 
 ---
 

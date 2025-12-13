@@ -41,12 +41,14 @@ export interface ChunkRef {
   chunkId: string;
   /** IPFS CID of the encrypted chunk */
   cid: string;
-  /** Byte offset within the decrypted chunk */
+  /** Byte offset of encrypted segment within chunk (ciphertext position) */
   offset: number;
-  /** Length of file data in this chunk */
+  /** Original plaintext length (for file size/assembly) */
   length: number;
   /** Encryption method used */
   encryption: import('./gen/manifest_pb.ts').ChunkEncryption;
+  /** Actual encrypted segment length in bytes (includes any PADME padding overhead) */
+  encryptedLength: number;
 }
 
 /**

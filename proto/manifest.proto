@@ -86,12 +86,14 @@ message FileChunk {
   string chunk_id = 1;
   // IPFS CID of encrypted chunk
   string cid = 2;
-  // Byte offset within decrypted chunk
+  // Byte offset of encrypted segment within chunk (ciphertext position)
   uint32 offset = 3;
-  // Length of file data in this chunk
+  // Original plaintext length (for file size/assembly)
   uint32 length = 4;
   // Encryption method used
   ChunkEncryption encryption = 5;
+  // Actual encrypted segment length in bytes (includes any PADME padding overhead)
+  uint32 encrypted_length = 6;
 }
 
 // Chunk encryption method

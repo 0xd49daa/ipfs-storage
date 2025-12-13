@@ -110,3 +110,29 @@ export type {
   ChunkPlan,
   PlanChunksOptions,
 } from './chunk-plan.ts';
+
+// Encryption constants (Phase 7)
+export {
+  NONCE_SIZE,
+  AUTH_TAG_SIZE,
+  SINGLE_SHOT_OVERHEAD,
+  STREAM_HEADER_SIZE,
+  STREAM_CHUNK_OVERHEAD,
+  STREAM_CHUNK_SIZE,
+} from './constants.ts';
+
+// Chunk encryption (Phase 7)
+export {
+  encryptChunk,
+  encryptChunks,
+  createFileDataProvider,
+  computeEncryptedLength,
+  decryptSingleShot,
+  decryptStreaming,
+} from './chunk-encrypt.ts';
+export type {
+  EncryptedChunk,
+  EncryptedSegmentInfo,
+  EncryptChunkOptions,
+  FileDataProvider,
+} from './chunk-encrypt.ts';
