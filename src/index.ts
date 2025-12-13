@@ -56,3 +56,42 @@ export {
   encodeSubManifest,
   decodeSubManifest,
 } from './serialization.ts';
+
+// IpfsClient (Phase 2)
+export type { IpfsClient, MockIpfsClientOptions } from './ipfs-client.ts';
+export {
+  MockIpfsClient,
+  IpfsUploadError,
+  IpfsFetchError,
+  computeRawCid,
+  computeDagPbCid,
+  parseCid,
+  formatCid,
+} from './ipfs-client.ts';
+
+// Chunk ID utilities (Phase 3)
+export { generateChunkId, chunkIdToPath } from './chunk-id.ts';
+
+// Path utilities (Phase 3)
+export {
+  dirname,
+  basename,
+  extname,
+  isValidPath,
+  normalizePath,
+} from './path-utils.ts';
+
+// Types (Phase 4)
+export type { FileInput } from './types.ts';
+
+// Conflict resolution (Phase 4)
+export { resolveConflicts } from './conflicts.ts';
+
+// Types (Phase 5)
+export type { DirectoryInput } from './types.ts';
+
+// Directory utilities (Phase 5)
+export {
+  buildDirectoryTree,
+  type BuildDirectoryTreeOptions,
+} from './directories.ts';

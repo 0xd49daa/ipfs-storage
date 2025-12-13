@@ -8,6 +8,32 @@ import type {
 export { ChunkEncryption } from './gen/manifest_pb.ts';
 
 /**
+ * Input for a file to be uploaded in a batch.
+ * The `File` type is the standard Web API File interface.
+ */
+export interface FileInput {
+  /** File object containing the binary data */
+  file: File;
+  /** Full path in batch (e.g., "/photos/2024/img.jpg") */
+  path: string;
+  /** BLAKE2b content hash computed by caller */
+  contentHash: ContentHash;
+  /** Creation timestamp (Unix ms), defaults to Date.now() if not provided */
+  created?: number;
+}
+
+/**
+ * Input for an explicit directory declaration.
+ * Used to declare empty directories or override inferred timestamps.
+ */
+export interface DirectoryInput {
+  /** Full path in batch (e.g., "/photos/2024") */
+  path: string;
+  /** Creation timestamp (Unix ms), uses default if not provided */
+  created?: number;
+}
+
+/**
  * Reference to a chunk within a file.
  */
 export interface ChunkRef {

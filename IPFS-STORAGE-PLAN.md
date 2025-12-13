@@ -86,91 +86,154 @@ This plan breaks down the implementation into logical phases, ordered by depende
 
 ---
 
-## Phase 2: IpfsClient Interface & Mock Implementation
+## Phase 2: IpfsClient Interface & Mock Implementation ✅
+
+**Status:** Complete
 
 **Goal:** Define the IPFS abstraction layer and create a test double.
 
 **Tasks:**
-1. Define `IpfsClient` interface: `uploadCar()`, `cat()`, `has()`
-2. Implement in-memory mock `IpfsClient` for testing (stores CAR content in Map, computes CIDs)
-3. Add helper to extract blocks from stored CARs
-4. Implement CID computation using `multiformats`
+1. ✅ Define `IpfsClient` interface: `uploadCar()`, `cat()`, `has()`
+2. ✅ Implement in-memory mock `IpfsClient` for testing (stores CAR content in Map, computes CIDs)
+3. ✅ Add helper to extract blocks from stored CARs
+4. ✅ Implement CID computation using `multiformats`
 
 **Deliverables:**
-- `IpfsClient` interface definition
-- `MockIpfsClient` for testing
-- CID computation utilities
+- ✅ `IpfsClient` interface definition with JSDoc
+- ✅ `MockIpfsClient` for testing with test helpers
+- ✅ CID computation utilities (`computeRawCid`, `computeDagPbCid`, `parseCid`, `formatCid`)
+- ✅ Error classes (`IpfsUploadError`, `IpfsFetchError`)
 
-**Testing:**
-- Mock correctly computes CIDs for uploaded content
-- `cat()` returns correct bytes for path within CAR
-- `has()` returns true only for uploaded CIDs
+**Files Created:**
+- `src/ipfs-client.ts` — IpfsClient interface, MockIpfsClient, CID utilities, error classes
+- `src/ipfs-client.test.ts` — 27 unit tests
+
+**Files Modified:**
+- `package.json` — Added `@ipld/dag-pb` dependency
+- `src/index.ts` — Exported new types and functions
+
+**Testing:** 27 tests passing
+- ✅ Mock correctly computes CIDs for uploaded content
+- ✅ `uploadCar()` stores all blocks atomically
+- ✅ `cat()` returns correct bytes for direct CID (no path)
+- ✅ `cat()` resolves paths within UnixFS directory structure
+- ✅ `cat()` handles nested paths like `/subdir/file.txt`
+- ✅ `has()` returns true only for uploaded CIDs
+- ✅ Test helpers: `clear()`, `setFailNextUpload()`, `getBlock()`, `getBlockCount()`
 
 ---
 
-## Phase 3: Chunk ID Generation & Path Utilities
+## Phase 3: Chunk ID Generation & Path Utilities ✅
+
+**Status:** Complete
 
 **Goal:** Implement chunk naming and hierarchical path generation.
 
 **Tasks:**
-1. Implement `generateChunkId()`: `base58(crypto.randomUUID())` → 22 chars
-2. Implement `chunkIdToPath()`: `{id[0:2]}/{id[2:4]}/{id}`
-3. Create path validation utilities (no leading/trailing slashes, proper hierarchy)
-4. Implement `dirname()`, `basename()`, `extname()` for path manipulation
+1. ✅ Implement `generateChunkId()`: `base58(randomBytes(16))` → 22 chars
+2. ✅ Implement `chunkIdToPath()`: `{id[0:2]}/{id[2:4]}/{id}`
+3. ✅ Create path validation utilities (`isValidPath()`, `normalizePath()`)
+4. ✅ Implement `dirname()`, `basename()`, `extname()` for path manipulation
 
 **Deliverables:**
-- Chunk ID generator
-- Path transformation utilities
-- Path validation functions
+- ✅ Chunk ID generator (`generateChunkId()`)
+- ✅ Path transformation utilities (`chunkIdToPath()`)
+- ✅ Path validation functions (`isValidPath()`, `normalizePath()`)
+- ✅ Path manipulation functions (`dirname()`, `basename()`, `extname()`)
 
-**Testing:**
-- Generated IDs are 22 characters, valid base58
-- Path hierarchy correctly splits ID
-- Path utilities handle edge cases (root, no extension, multiple dots)
+**Files Created:**
+- `src/chunk-id.ts` — `generateChunkId()`, `chunkIdToPath()`
+- `src/path-utils.ts` — `dirname()`, `basename()`, `extname()`, `isValidPath()`, `normalizePath()`
+- `src/chunk-id.test.ts` — 29 unit tests
+
+**Files Modified:**
+- `src/index.ts` — Exported Phase 3 functions
+
+**Testing:** 29 tests passing
+- ✅ Generated IDs are 22 characters, valid base58
+- ✅ Produces unique IDs on repeated calls
+- ✅ Path hierarchy correctly splits ID (format `{2}/{2}/{22}`)
+- ✅ Path utilities handle edge cases (root, no extension, multiple dots, dotfiles)
 
 ---
 
-## Phase 4: Duplicate Path Resolution
+## Phase 4: Duplicate Path Resolution ✅
+
+**Status:** Complete
 
 **Goal:** Implement auto-rename logic for conflicting file paths.
 
 **Tasks:**
-1. Implement `resolveConflicts()` algorithm per spec
-2. Handle edge cases: existing `_N` suffixes, files without extensions, nested paths
-3. Build deterministic processing order (input array order)
-4. Return `RenamedFile[]` mapping original → resolved paths
+1. ✅ Implement `resolveConflicts()` algorithm per spec
+2. ✅ Handle edge cases: existing `_N` suffixes, files without extensions, nested paths
+3. ✅ Build deterministic processing order (input array order)
+4. ✅ Return `string[]` aligned with input (resolvedPaths[i] is path for files[i])
 
 **Deliverables:**
-- `resolveConflicts()` function
-- `RenamedFile` type and mapping
+- ✅ `resolveConflicts(files: FileInput[]): string[]` function (array aligned with input)
+- ✅ `FileInput` interface (file, path, contentHash, created?)
 
-**Testing:**
-- Same input produces identical renames
-- Counter skips existing `_N` patterns
-- Extensions preserved correctly
-- Directory paths unaffected
+**Files Created:**
+- `src/conflicts.ts` — `resolveConflicts()` implementation
+- `src/conflicts.test.ts` — 15 unit tests
+
+**Files Modified:**
+- `tsconfig.json` — Added `"DOM"` to lib for `File` type
+- `src/types.ts` — Added `FileInput` interface
+- `src/index.ts` — Exported `FileInput` type and `resolveConflicts` function
+
+**Testing:** 15 tests passing
+- ✅ No conflicts returns unchanged paths
+- ✅ Single duplicate renamed with `_1` suffix
+- ✅ Multiple duplicates with incrementing suffixes
+- ✅ Counter skips existing `_N` patterns
+- ✅ Files without extension handled
+- ✅ Multiple dots in filename (`.tar.gz`)
+- ✅ Dotfiles handled correctly
+- ✅ Nested paths work
+- ✅ Different directories don't conflict
+- ✅ Deterministic output for same input
+- ✅ Large batch (100+ duplicates) with all unique paths
+- ✅ Root-level duplicates (no `//` in output)
+- ✅ Invalid paths throw `ValidationError`
+- ✅ Returned array aligned with input array
 
 ---
 
-## Phase 5: Directory Inference & Validation
+## Phase 5: Directory Inference & Validation ✅
+
+**Status:** Complete
 
 **Goal:** Build directory structure from file paths and explicit directory inputs.
 
 **Tasks:**
-1. Implement directory inference from file paths
-2. Merge inferred directories with explicit `DirectoryInput[]`
-3. Deduplicate and sort directories by path
-4. Validate path formats (no double slashes, proper root)
-5. Build `DirectoryInfo[]` with name extraction and created timestamps
+1. ✅ Implement directory inference from file paths
+2. ✅ Merge inferred directories with explicit `DirectoryInput[]`
+3. ✅ Deduplicate and sort directories by path
+4. ✅ Validate path formats (no double slashes, proper root)
+5. ✅ Build `DirectoryInfo[]` with name extraction and created timestamps
 
 **Deliverables:**
-- `buildDirectoryTree()` function
-- Path validation utilities
+- ✅ `buildDirectoryTree()` function
+- ✅ `DirectoryInput` interface
+- ✅ `BuildDirectoryTreeOptions` interface
 
-**Testing:**
-- Intermediate directories inferred correctly
-- Explicit directories override inferred timestamps
-- Empty directories preserved only when explicitly declared
+**Files Created:**
+- `src/directories.ts` — `buildDirectoryTree()` implementation
+- `src/directories.test.ts` — 22 unit tests
+
+**Files Modified:**
+- `src/types.ts` — Added `DirectoryInput` interface
+- `src/index.ts` — Exported Phase 5 types and functions
+
+**Testing:** 22 tests passing
+- ✅ Intermediate directories inferred correctly
+- ✅ Explicit directories override inferred timestamps
+- ✅ Empty directories preserved only when explicitly declared
+- ✅ Ancestors of explicit dirs use `defaultCreated` (not inherited)
+- ✅ Explicit "/" throws ValidationError
+- ✅ Invalid paths in `resolvedPaths` throw ValidationError
+- ✅ Timestamp pinned once at function entry for determinism
 
 ---
 
