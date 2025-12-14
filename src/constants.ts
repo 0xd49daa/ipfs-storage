@@ -53,3 +53,18 @@ export const STREAM_CHUNK_OVERHEAD = 17;
  * Download uses this constant to compute encrypted lengths from plaintext lengths.
  */
 export const STREAM_CHUNK_SIZE = 64 * 1024;
+
+// ============================================================================
+// Manifest Encryption Constants (Phase 9)
+// ============================================================================
+
+/**
+ * Domain separation constants for manifest encryption.
+ * Root and sub-manifests use different contexts to prevent cross-usage attacks.
+ */
+export const MANIFEST_DOMAIN = {
+  /** Domain context for root manifest encryption */
+  ROOT: 'ipfs-storage:manifest:v1',
+  /** Domain context for sub-manifest encryption */
+  SUB: 'ipfs-storage:submanifest:v1',
+} as const;

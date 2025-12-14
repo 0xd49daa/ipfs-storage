@@ -160,3 +160,14 @@ export interface ManifestEnvelopeData {
   /** Recipient key wrapping records */
   recipients: RecipientKeyInfo[];
 }
+
+/**
+ * Recipient information for upload operations.
+ * Used to specify who can decrypt the manifest.
+ */
+export interface RecipientInfo {
+  /** Recipient's X25519 public key */
+  publicKey: X25519PublicKey;
+  /** Optional device/user label (e.g., "MacBook Pro", "iPhone") */
+  label?: string;
+}

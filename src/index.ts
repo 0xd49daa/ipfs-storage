@@ -147,3 +147,21 @@ export type {
   CarSegmentGenerator,
   CarSegmentsResult,
 } from './car-builder.ts';
+
+// Manifest builder (Phase 9)
+export type { RecipientInfo } from './types.ts';
+export { MANIFEST_DOMAIN } from './constants.ts';
+export {
+  sortFilesByPath,
+  buildManifest,
+  encryptManifest,
+  buildAndEncryptManifest,
+} from './manifest-builder.ts';
+export type {
+  BuildManifestOptions,
+  BuildManifestInput,
+  ManifestBuildResult,
+  EncryptManifestInput,
+  EncryptedManifestResult,
+  BuildAndEncryptManifestInput,
+} from './manifest-builder.ts';

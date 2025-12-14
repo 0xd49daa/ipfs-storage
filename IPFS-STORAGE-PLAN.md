@@ -457,29 +457,67 @@ Segment N-1:   roots: [rootCid]           ← real root declared
 
 ---
 
-## Phase 9: Manifest Construction & Encryption
+## Phase 9: Manifest Construction & Encryption ✅
+
+**Status:** Complete
 
 **Goal:** Build, split, and encrypt manifests.
 
 **Tasks:**
-1. Build `RootManifest` from file records and directory info
-2. Implement manifest splitting (~1MB per sub-manifest, sorted by path)
-3. Build `SubManifestIndex` entries with path ranges
-4. Encrypt manifest using `encrypt()` with manifest key
-5. Build `ManifestEnvelope` with `wrapKeyAuthenticatedMulti()` for recipients
-6. Serialize to Protobuf
+1. ✅ Build `RootManifest` from file records and directory info
+2. ✅ Implement manifest splitting (~1MB per sub-manifest, sorted by path)
+3. ✅ Build `SubManifestIndex` entries with path ranges
+4. ✅ Encrypt manifest using `encrypt()` with manifest key
+5. ✅ Build `ManifestEnvelope` with `wrapKeyAuthenticatedMulti()` for recipients
+6. ✅ Serialize to Protobuf
+
+**Design Decisions:**
+
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| Split threshold | Encoded protobuf bytes | `encodeSubManifest().length`, not payload sum |
+| manifest_id naming | Zero-based `m_0`, `m_1`, ... | Matches Phase 8 CAR `/m_N` paths |
+| Path sorting | True UTF-8 byte comparison | Uses TextEncoder to compare actual bytes, not UTF-16 code units |
+| Domain separation | `MANIFEST_DOMAIN.ROOT` vs `.SUB` | Different contexts prevent cross-usage attacks |
+| Directory placement | Root manifest only | Directories never split; Phase 13 reads dirs from root |
+| Single file handling | Always in root | Splitting only makes sense with multiple files |
+| Recipients validation | Check before encryption | `recipients.length === 0` throws ValidationError |
+| maxSubManifestSize validation | Must be positive | Zero/negative values throw ValidationError |
 
 **Deliverables:**
-- `buildManifest()` function
-- Manifest splitting logic
-- `encryptManifest()` function
-- Recipient key wrapping
+- ✅ `sortFilesByPath()` function (byte-wise deterministic sort)
+- ✅ `buildManifest()` function with optional splitting
+- ✅ `encryptManifest()` function with domain separation
+- ✅ `buildAndEncryptManifest()` convenience function
+- ✅ `RecipientInfo` interface for upload input
+- ✅ `MANIFEST_DOMAIN` constants for encryption contexts
 
-**Testing:**
-- Manifest round-trips through encryption/decryption
-- Large file counts trigger splitting
-- All recipients can unwrap manifest key
-- Labels preserved in recipient records
+**Files Created:**
+- `src/manifest-builder.ts` — Core manifest building and encryption (290 lines)
+- `src/manifest-builder.test.ts` — 37 unit tests
+
+**Files Modified:**
+- `src/types.ts` — Added `RecipientInfo` interface
+- `src/constants.ts` — Added `MANIFEST_DOMAIN` constants
+- `src/index.ts` — Exported Phase 9 types and functions
+
+**Testing:** 37 tests passing
+- ✅ `sortFilesByPath()` byte-wise ordering, special chars, unicode
+- ✅ `sortFilesByPath()` UTF-8 bytes vs UTF-16 code units (emoji, BMP chars)
+- ✅ `sortFilesByPath()` multi-byte UTF-8 sequences (CJK, Greek, ASCII)
+- ✅ `buildManifest()` no splitting for small batches
+- ✅ `buildManifest()` triggers splitting for large batches
+- ✅ `buildManifest()` directories stay in root (never split)
+- ✅ Sub-manifest index has correct path ranges (startPath/endPath)
+- ✅ Single file never splits unnecessarily
+- ✅ Empty files array (directories only) is valid
+- ✅ Throws ValidationError for zero/negative maxSubManifestSize
+- ✅ `encryptManifest()` round-trip encrypt/decrypt
+- ✅ Multiple recipients can all unwrap manifest key
+- ✅ Labels preserved in recipient records
+- ✅ Throws ValidationError for empty recipients
+- ✅ Sub-manifests use different domain context than root
+- ✅ Integration: large manifest with splitting round-trips correctly
 
 ---
 
