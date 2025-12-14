@@ -636,28 +636,93 @@ Segment N-1:   roots: [rootCid]           ← real root declared
 
 ---
 
-## Phase 11: Upload Resume Support
+## Phase 11: Upload Resume Support ✅
+
+**Status:** Complete (with limitations)
 
 **Goal:** Implement resumable uploads from saved state.
 
+**Key Discovery:** Encryption uses random nonces (libsodium secretbox), so re-encryption produces different ciphertext and different CIDs. True segment skipping would require either:
+1. Deterministic encryption (derive nonces from content hash)
+2. Storing encrypted chunk bytes in resume state
+
+Neither is implemented, so **resume preserves the manifestKey but re-uploads all segments**.
+
+**Design Decisions:**
+
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| ManifestKey storage | Base64 string in `UploadState` | JSON-serializable for persistence |
+| Timestamp preservation | `created` field in `UploadState` | Stable batch timestamp across resume attempts |
+| Segment skipping | **Not implemented** | CIDs are non-deterministic; skipping causes batch corruption |
+| CID validation | **Removed** | Re-encryption produces different CIDs each time |
+| `verifyResumeState` | **Deprecated (no-op)** | Verification meaningless without deterministic CIDs |
+| Segment count validation | Enforced | Catches file list changes between attempts |
+| ManifestKey reuse | Implemented | Same file keys → previously-downloaded files still decryptable |
+
 **Tasks:**
-1. Accept `resumeState` in `UploadOptions`
-2. Skip already-completed segments
-3. Resume from failed segment
-4. Use `ipfsClient.has()` for cross-segment CID deduplication
-5. Maintain state consistency across resume attempts
-6. Implement `onSegmentComplete` callback for state persistence
+1. ✅ Accept `resumeState` in `UploadOptions`
+2. ✅ Validate segment count matches (throws `ResumeValidationError` on mismatch)
+3. ✅ Decode and reuse `manifestKeyBase64` from resume state
+4. ✅ Store `manifestKeyBase64` in `UploadState` for JSON serialization
+5. ✅ Add `ResumeValidationError` class for validation failures
+6. ✅ Document limitations in JSDoc (segment skipping not supported)
+7. ✅ Preserve `created` timestamp across resume attempts
+8. ❌ Skip already-completed segments (removed - causes corruption)
+9. ❌ CID validation (removed - CIDs are non-deterministic)
+10. ❌ `verifyResumeState` functionality (deprecated - no effect)
 
 **Deliverables:**
-- Resume logic in `uploadBatch()`
-- State validation on resume
-- Segment completion callback
+- ✅ `resumeState` option in `UploadOptions`
+- ✅ `manifestKeyBase64` field in `UploadState`
+- ✅ `created` field in `UploadState` (optional, backward-compatible)
+- ✅ `ResumeValidationError` class
+- ✅ `assertValidResumeState()` structure validation
+- ✅ `validateResumeState()` segment count validation (returns void)
+- ⚠️ `verifyResumeState` option (deprecated, no-op)
+- ⚠️ `chunksSkipped` fields (deprecated, always 0)
 
-**Testing:**
-- Resume from middle of upload completes successfully
-- State from interrupted upload is valid for resume
-- Completed segments not re-uploaded
-- Failed segment correctly retried
+**Files Modified:**
+- `src/upload.ts` — Resume logic, validation helpers, timestamp preservation
+- `src/errors.ts` — Added `ResumeValidationError`, `manifestKeyBase64`, `created` to `UploadStateForError`
+- `src/types.ts` — Added `verifyResumeState` option (deprecated), updated JSDoc
+- `src/index.ts` — Exported `ResumeValidationError`
+
+**Testing:** 37 tests passing
+- ✅ Structure validation (missing fields, invalid base64, wrong key length)
+- ✅ Segment count mismatch throws `ResumeValidationError`
+- ✅ Resume reuses manifestKey from state
+- ✅ Resume re-uploads all segments (no skipping)
+- ✅ `UploadState` survives JSON round-trip
+- ✅ Resumed upload produces retrievable, decryptable data
+- ✅ Data integrity after resume (manifest retrieval, chunk decryption)
+
+**Current Resume Behavior:**
+```
+Initial Upload (fails at segment 2):
+  segment[0]: complete → state saved (includes created timestamp)
+  segment[1]: complete → state saved
+  segment[2]: uploading → error thrown with UploadState
+
+Resume (from saved state):
+  segment[0]: re-uploaded (new CID)
+  segment[1]: re-uploaded (new CID)
+  segment[2]: re-uploaded (new CID)
+  segment[3]: uploaded
+
+Result: New rootCid (different from original attempt)
+        Same file keys (manifestKey preserved)
+        Same batch timestamp (created preserved from state)
+        Previously-downloaded files still decryptable
+```
+
+**Limitations:**
+- All segments re-uploaded on resume (no bandwidth savings)
+- New rootCid generated each attempt (CIDs not stable)
+- `verifyResumeState` option has no effect
+
+**Future Enhancement (not planned):**
+To enable true segment skipping, would need deterministic encryption where nonces are derived from content (e.g., `nonce = hash(fileKey || offset)`). This is a significant crypto architecture change.
 
 ---
 

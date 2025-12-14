@@ -197,8 +197,24 @@ export interface UploadOptions {
   segmentSize?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
-  /** Resume state from previous upload attempt (Phase 11) */
+  /**
+   * Resume state from previous upload attempt.
+   * When provided, the manifestKey is reused to ensure consistent file key derivation.
+   *
+   * **Important**: All segments are always re-uploaded because encryption uses random
+   * nonces, making CIDs non-deterministic. The resume state ensures the same manifestKey
+   * is used, so file keys remain consistent and previously-downloaded files can still
+   * be decrypted with keys derived from the new upload's manifest.
+   *
+   * Segment count must match (throws ResumeValidationError if files changed).
+   */
   resumeState?: import('./errors.ts').UploadStateForError;
+  /**
+   * @deprecated This option has no effect. Previously intended to verify segments
+   * exist via ipfsClient.has(), but since all segments are always re-uploaded
+   * (due to non-deterministic encryption), verification is unnecessary.
+   */
+  verifyResumeState?: boolean;
   /** Progress callback */
   onProgress?: UploadProgressCallback;
   /** Segment completion callback */
@@ -213,7 +229,7 @@ export interface BatchResult {
   cid: string;
   /** Decrypted manifest (for caller storage) */
   manifest: BatchManifest;
-  /** Total encrypted size in bytes */
+  /** Total encrypted bytes uploaded */
   totalSize: number;
   /** Number of chunks in the batch */
   chunkCount: number;
@@ -258,7 +274,10 @@ export interface UploadProgress {
   currentSegment?: number;
   /** Total segments to upload */
   totalSegments?: number;
-  /** Chunks skipped due to resume (Phase 11, always 0 in Phase 10) */
+  /**
+   * @deprecated Always 0. Previously indicated chunks skipped due to resume,
+   * but all segments are now always re-uploaded.
+   */
   chunksSkipped?: number;
 }
 
@@ -275,7 +294,10 @@ export interface SegmentResult {
   index: number;
   /** Chunks uploaded in this segment */
   chunksUploaded: number;
-  /** Chunks skipped (Phase 11, always 0 in Phase 10) */
+  /**
+   * @deprecated Always 0. Previously indicated chunks skipped due to resume,
+   * but all segments are now always re-uploaded.
+   */
   chunksSkipped: number;
   /** Total segments in batch */
   totalSegments: number;

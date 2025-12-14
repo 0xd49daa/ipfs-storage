@@ -113,7 +113,13 @@ describe('Phase 0: Foundation', () => {
     });
 
     test('SegmentUploadError contains segmentIndex and state', () => {
-      const state = { batchId: 'batch1', segments: [] };
+      const state = {
+        batchId: 'batch1',
+        segments: [],
+        manifestCid: 'bafyreimani',
+        rootCid: 'bafybeiroot',
+        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      };
       const err = new SegmentUploadError(2, state);
       expect(err.segmentIndex).toBe(2);
       expect(err.state).toBe(state);

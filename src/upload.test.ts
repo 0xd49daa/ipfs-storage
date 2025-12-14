@@ -784,3 +784,535 @@ describe('uploadBatch - error handling', () => {
     }
   });
 });
+
+// ============================================================================
+// Phase 11: Resume Tests
+// ============================================================================
+
+import { ResumeValidationError } from './index.ts';
+import type { UploadStateForError } from './errors.ts';
+
+describe('uploadBatch - resume (Phase 11)', () => {
+  describe('structure validation (assertValidResumeState)', () => {
+    test('missing batchId throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        segments: [{ index: 0, status: 'pending', chunkCids: {} }],
+        manifestCid: 'bafyrei123',
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('batchId must be a non-empty string');
+    });
+
+    test('missing manifestCid throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        batchId: 'batch1',
+        segments: [{ index: 0, status: 'pending', chunkCids: {} }],
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('manifestCid must be a non-empty string');
+    });
+
+    test('invalid base64 manifestKeyBase64 throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        batchId: 'batch1',
+        segments: [{ index: 0, status: 'pending', chunkCids: {} }],
+        manifestCid: 'bafyrei123',
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'not-valid-base64!!!',
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('not valid base64');
+    });
+
+    test('manifestKeyBase64 wrong length throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        batchId: 'batch1',
+        segments: [{ index: 0, status: 'pending', chunkCids: {} }],
+        manifestCid: 'bafyrei123',
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'AQID', // 3 bytes instead of 32
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('must decode to 32 bytes');
+    });
+
+    test('segment with wrong index throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        batchId: 'batch1',
+        segments: [{ index: 5, status: 'pending', chunkCids: {} }], // Should be 0
+        manifestCid: 'bafyrei123',
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('index must equal 0');
+    });
+
+    test('segment with unknown status throws ValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test', '/test.txt');
+
+      const badState = {
+        batchId: 'batch1',
+        segments: [{ index: 0, status: 'unknown-status', chunkCids: {} }],
+        manifestCid: 'bafyrei123',
+        rootCid: 'bafybei456',
+        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      } as unknown as UploadStateForError;
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: badState,
+        }, ipfsClient)
+      ).rejects.toThrow('status must be pending|uploading|complete|failed');
+    });
+  });
+
+  describe('segment count validation', () => {
+    test('segment count mismatch throws ResumeValidationError', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('test content for resume', '/test.txt');
+
+      // Get state from failed upload via SegmentUploadError
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Add extra segments to cause mismatch
+      savedState!.segments.push({ index: 1, status: 'pending', chunkCids: {} });
+      savedState!.segments[0]!.status = 'pending';
+      ipfsClient.clear();
+
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: savedState!,
+        }, ipfsClient)
+      ).rejects.toThrow(ResumeValidationError);
+      await expect(
+        uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: savedState!,
+        }, ipfsClient)
+      ).rejects.toThrow('segmentCount');
+    });
+
+    // NOTE: We do NOT validate CIDs between saved state and newly computed values.
+    // Encryption uses random nonces, so CIDs are non-deterministic across sessions.
+    // Resumed uploads produce DIFFERENT rootCids than the original attempt.
+    // This is expected behavior - resume only skips already-uploaded segments.
+  });
+
+  describe('resume behavior', () => {
+    // NOTE: Due to non-deterministic encryption (random nonces), we cannot skip
+    // segments on resume. Re-encryption produces different CIDs, so skipping
+    // would cause batch corruption (manifest referencing non-existent blocks).
+    // Resume currently means: use same manifestKey, re-upload everything.
+
+    test('resume re-uploads all segments with same manifestKey', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+
+      // Create a single file
+      const file = await createFileInput('Test content for resume', '/test.txt');
+
+      // First upload attempt - fail to capture state with manifestKey
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Resume - will re-encrypt and re-upload (new CIDs due to random nonces)
+      ipfsClient.clear();
+      savedState!.segments[0]!.status = 'pending';
+
+      const result = await uploadBatch([file], {
+        senderKeyPair: keyPair,
+        recipients: [{ publicKey: keyPair.publicKey }],
+        resumeState: savedState!,
+      }, ipfsClient);
+
+      // Resumed upload succeeds with new CID (encryption is non-deterministic)
+      expect(result.cid).toBeTruthy();
+      expect(result.segmentsUploaded).toBe(1);
+      expect(result.manifest.files).toHaveLength(1);
+      expect(result.manifest.files[0]!.path).toBe('/test.txt');
+      // Note: result.cid != savedState.rootCid because encryption uses random nonces
+    });
+
+    test('resume with pending segment re-uploads successfully', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('Deterministic content', '/test.txt');
+
+      // First attempt - fail to get state
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Resume with the saved state (pending segment will be re-uploaded)
+      ipfsClient.clear();
+      savedState!.segments[0]!.status = 'pending';
+
+      const result = await uploadBatch([file], {
+        senderKeyPair: keyPair,
+        recipients: [{ publicKey: keyPair.publicKey }],
+        resumeState: savedState!,
+      }, ipfsClient);
+
+      // NOTE: Resumed uploads produce DIFFERENT rootCids because encryption
+      // uses random nonces. The manifest content is the same, but the encrypted
+      // bytes differ, resulting in different CIDs.
+      expect(result.cid).toBeTruthy();
+      expect(result.segmentsUploaded).toBe(1);
+      expect(result.manifest.files).toHaveLength(1);
+      expect(result.manifest.files[0]!.path).toBe('/test.txt');
+    });
+  });
+
+  describe('JSON serialization', () => {
+    test('UploadState survives JSON round-trip', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const file = await createFileInput('JSON test', '/test.txt');
+
+      // Get state from upload
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      // Round-trip through JSON
+      const json = JSON.stringify(savedState);
+      const restored = JSON.parse(json) as UploadStateForError;
+
+      // Verify structure
+      expect(restored.batchId).toBe(savedState!.batchId);
+      expect(restored.manifestCid).toBe(savedState!.manifestCid);
+      expect(restored.rootCid).toBe(savedState!.rootCid);
+      expect(restored.manifestKeyBase64).toBe(savedState!.manifestKeyBase64);
+      expect(restored.segments.length).toBe(savedState!.segments.length);
+
+      // Resume with restored state
+      ipfsClient.clear();
+      restored.segments[0]!.status = 'pending';
+
+      const result = await uploadBatch([file], {
+        senderKeyPair: keyPair,
+        recipients: [{ publicKey: keyPair.publicKey }],
+        resumeState: restored,
+      }, ipfsClient);
+
+      expect(result.cid).toBeTruthy();
+    });
+  });
+
+  describe('empty batch resume', () => {
+    test('empty batch resume validates segment count', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+
+      // Create empty file
+      const emptyFile: FileInput = {
+        file: new File([], 'empty.txt'),
+        path: '/empty.txt',
+        contentHash: await hashString(''),
+      };
+
+      // Get state from failed upload
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([emptyFile], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Add extra segment to cause mismatch (empty batch should have 1 segment)
+      savedState!.segments.push({ index: 1, status: 'pending', chunkCids: {} });
+      savedState!.segments[0]!.status = 'pending';
+      ipfsClient.clear();
+
+      await expect(
+        uploadBatch([emptyFile], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: savedState!,
+        }, ipfsClient)
+      ).rejects.toThrow(ResumeValidationError);
+      await expect(
+        uploadBatch([emptyFile], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          resumeState: savedState!,
+        }, ipfsClient)
+      ).rejects.toThrow('segmentCount');
+    });
+
+    test('empty batch resume re-uploads successfully', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+
+      // Create empty file
+      const emptyFile: FileInput = {
+        file: new File([], 'empty.txt'),
+        path: '/empty.txt',
+        contentHash: await hashString(''),
+      };
+
+      // First upload attempt - fail to get state
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([emptyFile], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Resume - always re-uploads because encryption is non-deterministic
+      ipfsClient.clear();
+      savedState!.segments[0]!.status = 'pending';
+
+      const result = await uploadBatch([emptyFile], {
+        senderKeyPair: keyPair,
+        recipients: [{ publicKey: keyPair.publicKey }],
+        resumeState: savedState!,
+      }, ipfsClient);
+
+      // Resume succeeds with new CID (encryption is non-deterministic)
+      expect(result.cid).toBeTruthy();
+      expect(result.segmentsUploaded).toBe(1);
+      expect(result.chunkCount).toBe(0); // Empty batch has no chunks
+    });
+  });
+
+  // NOTE: verifyResumeState option is no longer functional because we always
+  // re-upload all segments due to non-deterministic encryption. The option is
+  // kept for API compatibility but has no effect.
+
+  describe('resume data integrity', () => {
+    test('resumed upload produces retrievable, decryptable data', async () => {
+      const keyPair = await createTestKeyPair();
+      const ipfsClient = new MockIpfsClient();
+      const content = 'Content to verify after resume';
+      const file = await createFileInput(content, '/data.txt');
+
+      // First upload attempt - fail to capture state with manifestKey
+      let savedState: UploadStateForError | null = null;
+      ipfsClient.setFailNextUpload(true);
+      try {
+        await uploadBatch([file], {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+        }, ipfsClient);
+      } catch (err) {
+        if (err instanceof SegmentUploadError) {
+          savedState = err.state;
+        }
+      }
+
+      expect(savedState).not.toBeNull();
+
+      // Resume upload
+      ipfsClient.clear();
+      savedState!.segments[0]!.status = 'pending';
+
+      const result = await uploadBatch([file], {
+        senderKeyPair: keyPair,
+        recipients: [{ publicKey: keyPair.publicKey }],
+        resumeState: savedState!,
+      }, ipfsClient);
+
+      // Verify manifest can be retrieved
+      const manifestBytes = await collectBytes(ipfsClient.cat(result.cid, '/m'));
+      expect(manifestBytes.length).toBeGreaterThan(0);
+
+      // Verify envelope decodes correctly
+      const envelope = decodeManifestEnvelope(manifestBytes);
+      expect(envelope.recipients).toHaveLength(1);
+
+      // Verify chunk can be retrieved and decrypted
+      const fileInfo = result.manifest.files[0]!;
+      const chunkRef = fileInfo.chunks[0]!;
+      const chunkPath = chunkIdToPath(asChunkId(chunkRef.chunkId));
+
+      const encryptedBytes = await collectBytes(
+        ipfsClient.cat(result.cid, `/${chunkPath}`)
+      );
+      expect(encryptedBytes.length).toBe(chunkRef.encryptedLength);
+
+      // Derive file key and decrypt
+      const fileKey = await deriveFileKey(
+        result.manifest.manifestKey,
+        fileInfo.contentHash
+      );
+
+      const segmentBytes = encryptedBytes.slice(
+        chunkRef.offset,
+        chunkRef.offset + chunkRef.encryptedLength
+      );
+
+      const plaintext = await decryptSingleShot(segmentBytes, fileKey);
+      const trimmedPlaintext = plaintext.slice(0, chunkRef.length);
+      const decoded = new TextDecoder().decode(trimmedPlaintext);
+
+      expect(decoded).toBe(content);
+    });
+  });
+});

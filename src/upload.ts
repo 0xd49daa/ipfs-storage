@@ -5,8 +5,8 @@
  * from Phases 0-9 to upload encrypted files to IPFS.
  */
 
-import { generateKey, randomBytes } from '@filemanager/encryptionv2';
-import { base58 } from '@scure/base';
+import { generateKey, randomBytes, type SymmetricKey } from '@filemanager/encryptionv2';
+import { base58, base64 } from '@scure/base';
 import { CID } from 'multiformats/cid';
 import { CarBufferWriter } from '@ipld/car';
 import * as dagPb from '@ipld/dag-pb';
@@ -31,7 +31,7 @@ import type {
   SegmentStateForError,
 } from './errors.ts';
 
-import { ValidationError, SegmentUploadError } from './errors.ts';
+import { ValidationError, SegmentUploadError, ResumeValidationError } from './errors.ts';
 import { resolveConflicts } from './conflicts.ts';
 import { buildDirectoryTree } from './directories.ts';
 import { planChunks } from './chunk-plan.ts';
@@ -252,6 +252,92 @@ function checkAbort(signal?: AbortSignal): void {
 }
 
 // ============================================================================
+// Resume Validation Helpers (Phase 11)
+// ============================================================================
+
+/**
+ * Validate the structure of a resume state object.
+ * Throws ValidationError if the structure is malformed.
+ */
+function assertValidResumeState(state: unknown): asserts state is UploadStateForError {
+  if (!state || typeof state !== 'object') {
+    throw new ValidationError('resumeState must be an object');
+  }
+  const s = state as Record<string, unknown>;
+
+  // Required string fields
+  if (typeof s.batchId !== 'string' || !s.batchId) {
+    throw new ValidationError('resumeState.batchId must be a non-empty string');
+  }
+  if (typeof s.manifestCid !== 'string' || !s.manifestCid) {
+    throw new ValidationError('resumeState.manifestCid must be a non-empty string');
+  }
+  if (typeof s.rootCid !== 'string' || !s.rootCid) {
+    throw new ValidationError('resumeState.rootCid must be a non-empty string');
+  }
+  if (typeof s.manifestKeyBase64 !== 'string') {
+    throw new ValidationError('resumeState.manifestKeyBase64 must be a string');
+  }
+
+  // Validate manifestKey is valid base64 and 32 bytes
+  let keyBytes: Uint8Array;
+  try {
+    keyBytes = base64.decode(s.manifestKeyBase64 as string);
+  } catch {
+    throw new ValidationError('resumeState.manifestKeyBase64 is not valid base64');
+  }
+  if (keyBytes.length !== 32) {
+    throw new ValidationError('resumeState.manifestKeyBase64 must decode to 32 bytes');
+  }
+
+  // Validate segments array
+  if (!Array.isArray(s.segments) || s.segments.length === 0) {
+    throw new ValidationError('resumeState.segments must be a non-empty array');
+  }
+
+  const validStatuses = new Set(['pending', 'uploading', 'complete', 'failed']);
+  for (let i = 0; i < s.segments.length; i++) {
+    const seg = s.segments[i] as Record<string, unknown>;
+    if (typeof seg !== 'object' || seg === null) {
+      throw new ValidationError(`resumeState.segments[${i}] must be an object`);
+    }
+    if (seg.index !== i) {
+      throw new ValidationError(`resumeState.segments[${i}].index must equal ${i}`);
+    }
+    if (!validStatuses.has(seg.status as string)) {
+      throw new ValidationError(
+        `resumeState.segments[${i}].status must be pending|uploading|complete|failed`
+      );
+    }
+    if (typeof seg.chunkCids !== 'object' || seg.chunkCids === null) {
+      throw new ValidationError(`resumeState.segments[${i}].chunkCids must be an object`);
+    }
+  }
+}
+
+/**
+ * Validate resume state segment count matches the current upload.
+ *
+ * NOTE: We do NOT skip segments or validate CIDs. Encryption uses random nonces,
+ * so CIDs are non-deterministic across sessions. The manifestKey is decoded
+ * earlier in the upload flow (Phase 5) to ensure consistent file key derivation.
+ *
+ * @throws ResumeValidationError if segment count mismatches
+ */
+function validateResumeState(
+  resumeState: UploadStateForError,
+  expectedSegmentCount: number
+): void {
+  if (resumeState.segments.length !== expectedSegmentCount) {
+    throw new ResumeValidationError(
+      'segmentCount',
+      String(expectedSegmentCount),
+      String(resumeState.segments.length)
+    );
+  }
+}
+
+// ============================================================================
 // Main Upload Function
 // ============================================================================
 
@@ -297,6 +383,11 @@ export async function uploadBatch(
     );
   }
 
+  // === PHASE 1.5: RESUME STATE STRUCTURE VALIDATION ===
+  if (options.resumeState) {
+    assertValidResumeState(options.resumeState);
+  }
+
   // === PHASE 2: CONFLICT RESOLUTION ===
   const resolvedPaths = resolveConflicts(files);
 
@@ -312,7 +403,8 @@ export async function uploadBatch(
   }
 
   // === PHASE 3: DIRECTORY BUILDING ===
-  const created = Date.now();
+  // Use timestamp from resume state if present, otherwise generate new one
+  const created = options.resumeState?.created ?? Date.now();
   const directories = buildDirectoryTree(resolvedPaths, options.directories, {
     defaultCreated: created,
   });
@@ -332,8 +424,10 @@ export async function uploadBatch(
 
   const chunkPlan = await planChunks(files, resolvedPaths);
 
-  // === PHASE 5: MANIFEST KEY GENERATION ===
-  const manifestKey = await generateKey();
+  // === PHASE 5: MANIFEST KEY (GENERATE OR USE FROM RESUME STATE) ===
+  const manifestKey = options.resumeState
+    ? (base64.decode(options.resumeState.manifestKeyBase64) as SymmetricKey)
+    : await generateKey();
 
   // === PHASE 6: CHUNK ENCRYPTION ===
   checkAbort(signal);
@@ -400,9 +494,9 @@ export async function uploadBatch(
     const emptyCarResult = await buildEmptyBatchCar(envelope, encryptedSubManifests);
 
     // Initialize upload state
-    const batchId = base58.encode(await randomBytes(16));
+    const emptyBatchId = options.resumeState?.batchId ?? base58.encode(await randomBytes(16));
     const uploadState: UploadStateForError = {
-      batchId,
+      batchId: emptyBatchId,
       segments: [
         {
           index: 0,
@@ -412,7 +506,24 @@ export async function uploadBatch(
       ],
       manifestCid: emptyCarResult.manifestCid,
       rootCid: emptyCarResult.rootCid,
+      manifestKeyBase64: base64.encode(manifestKey),
+      created,
     };
+
+    // === EMPTY BATCH RESUME VALIDATION ===
+    // Validate segment count if resuming. We always re-upload because encryption
+    // uses random nonces, making CIDs non-deterministic.
+    if (options.resumeState) {
+      if (options.resumeState.segments.length !== 1) {
+        throw new ResumeValidationError(
+          'segmentCount',
+          '1',
+          String(options.resumeState.segments.length)
+        );
+      }
+      // Note: We do NOT skip upload even if segment is "complete" in resumeState.
+      // Re-encryption produces different CIDs, so we must re-upload.
+    }
 
     // Upload single segment
     checkAbort(signal);
@@ -425,6 +536,7 @@ export async function uploadBatch(
       totalBytes: 0,
       currentSegment: 1,
       totalSegments: 1,
+      chunksSkipped: 0,
     });
 
     uploadState.segments[0]!.status = 'uploading';
@@ -465,6 +577,7 @@ export async function uploadBatch(
       totalBytes: 0,
       currentSegment: 1,
       totalSegments: 1,
+      chunksSkipped: 0,
     });
 
     const batchManifest: BatchManifest = {
@@ -538,7 +651,7 @@ export async function uploadBatch(
   });
 
   // === PHASE 12: INITIALIZE UPLOAD STATE ===
-  const batchId = base58.encode(await randomBytes(16));
+  const batchId = options.resumeState?.batchId ?? base58.encode(await randomBytes(16));
   const uploadState: UploadStateForError = {
     batchId,
     segments: carResult.segments.map((seg) => ({
@@ -550,9 +663,26 @@ export async function uploadBatch(
     })),
     manifestCid: carResult.manifestCid,
     rootCid: carResult.rootCid,
+    manifestKeyBase64: base64.encode(manifestKey),
+    created,
   };
 
+  // === PHASE 12.5: RESUME VALIDATION ===
+  // Validate segment count matches if resuming
+  if (options.resumeState) {
+    validateResumeState(options.resumeState, carResult.segmentCount);
+  }
+
   // === PHASE 13: UPLOAD SEGMENTS ===
+  // NOTE: We always upload ALL segments, even when resuming with "complete" segments.
+  // This is because encryption uses random nonces, so re-encryption produces different
+  // chunk CIDs. Skipping "complete" segments would leave the manifest referencing
+  // non-existent blocks, causing batch corruption.
+  //
+  // True segment skipping requires either:
+  // 1. Deterministic encryption (derive nonces from content)
+  // 2. Storing encrypted chunk bytes in resume state
+  // Neither is currently implemented.
   let segmentsUploaded = 0;
   let totalBytesUploaded = 0;
 

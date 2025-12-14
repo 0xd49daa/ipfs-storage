@@ -83,12 +83,21 @@ export interface SegmentStateForError {
 /**
  * Upload state for resumable uploads.
  * Defined here to avoid circular dependency with types.ts.
+ *
+ * This interface is JSON-serializable - callers can persist it with
+ * JSON.stringify() and restore it with JSON.parse() for resume.
  */
 export interface UploadStateForError {
   batchId: string;
   segments: SegmentStateForError[];
-  manifestCid?: string;
-  rootCid?: string;
+  /** CID of the encrypted manifest (required for resume validation) */
+  manifestCid: string;
+  /** Root CID of the batch (required for resume validation) */
+  rootCid: string;
+  /** Base64-encoded 32-byte manifest key (required for resume) */
+  manifestKeyBase64: string;
+  /** Batch creation timestamp (Unix ms). Used on resume to preserve original timestamp. */
+  created?: number;
 }
 
 /**
@@ -120,6 +129,31 @@ export class CidMismatchError extends IpfsStorageError {
   constructor(expected: string, actual: string) {
     super(`CID mismatch: expected ${expected}, got ${actual}`);
     this.name = 'CidMismatchError';
+    this.expected = expected;
+    this.actual = actual;
+  }
+}
+
+/**
+ * Resume validation failure.
+ * Thrown when resumeState doesn't match the current upload attempt.
+ *
+ * Currently only thrown when segment count mismatches (files added/removed).
+ *
+ * Note: CID validation was removed because encryption uses random nonces,
+ * making CIDs non-deterministic across sessions.
+ */
+export class ResumeValidationError extends IpfsStorageError {
+  readonly field: string;
+  readonly expected: string;
+  readonly actual: string;
+
+  constructor(field: string, expected: string, actual: string) {
+    super(
+      `Resume validation failed: ${field} mismatch (expected ${expected}, got ${actual})`
+    );
+    this.name = 'ResumeValidationError';
+    this.field = field;
     this.expected = expected;
     this.actual = actual;
   }

@@ -17,6 +17,7 @@ export {
   ChunkUnavailableError,
   SegmentUploadError,
   CidMismatchError,
+  ResumeValidationError,
 } from './errors.ts';
 
 // Re-export encryption types for convenience
