@@ -348,8 +348,12 @@ function validateBuildCarSegmentsOptions(
   options: BuildCarSegmentsOptions
 ): void {
   validateBuildBatchDirectoryOptions(options);
-  if (options.segmentSize !== undefined && options.segmentSize <= 0) {
-    throw new ValidationError('segmentSize must be positive');
+  if (options.segmentSize !== undefined) {
+    if (!Number.isFinite(options.segmentSize) || options.segmentSize <= 0 || !Number.isInteger(options.segmentSize)) {
+      throw new ValidationError(
+        `segmentSize must be a positive integer, got: ${options.segmentSize}`
+      );
+    }
   }
 }
 
@@ -439,7 +443,7 @@ export async function buildBatchDirectory(
  *
  * @param options - Chunks, manifest, sub-manifests, and segment size
  * @returns CarSegmentsResult with generators and metadata
- * @throws {ValidationError} If validation fails or segmentSize <= 0
+ * @throws {ValidationError} If validation fails or segmentSize is not a positive integer
  */
 export async function buildCarSegments(
   options: BuildCarSegmentsOptions

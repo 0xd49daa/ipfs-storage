@@ -165,3 +165,17 @@ export type {
   EncryptedManifestResult,
   BuildAndEncryptManifestInput,
 } from './manifest-builder.ts';
+
+// Upload orchestration (Phase 10)
+export { uploadBatch } from './upload.ts';
+export type {
+  UploadOptions,
+  BatchResult,
+  RenamedFile,
+  UploadProgressCallback,
+  UploadProgress,
+  UploadState,
+  SegmentState,
+  SegmentCompleteCallback,
+  SegmentResult,
+} from './types.ts';

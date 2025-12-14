@@ -186,15 +186,34 @@ describe('Phase 8: CAR File Generation', () => {
       ).rejects.toThrow('Sub-manifest m_0 cannot be empty');
     });
 
-    test('throws ValidationError for segmentSize <= 0', async () => {
+    test('throws ValidationError for invalid segmentSize', async () => {
       const chunks = generateFixedChunks(1);
       const manifest = new TextEncoder().encode('manifest');
+
+      // Zero
       await expect(
         buildCarSegments({ chunks, manifest, segmentSize: 0 })
       ).rejects.toThrow(ValidationError);
+
+      // Negative
       await expect(
         buildCarSegments({ chunks, manifest, segmentSize: -1 })
-      ).rejects.toThrow('segmentSize must be positive');
+      ).rejects.toThrow('segmentSize must be a positive integer');
+
+      // NaN
+      await expect(
+        buildCarSegments({ chunks, manifest, segmentSize: NaN })
+      ).rejects.toThrow(ValidationError);
+
+      // Infinity
+      await expect(
+        buildCarSegments({ chunks, manifest, segmentSize: Infinity })
+      ).rejects.toThrow(ValidationError);
+
+      // Non-integer
+      await expect(
+        buildCarSegments({ chunks, manifest, segmentSize: 2.5 })
+      ).rejects.toThrow(ValidationError);
     });
 
     test('accepts valid input without throwing', async () => {

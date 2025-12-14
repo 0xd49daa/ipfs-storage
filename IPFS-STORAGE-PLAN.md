@@ -521,33 +521,118 @@ Segment N-1:   roots: [rootCid]           ← real root declared
 
 ---
 
-## Phase 10: Upload Orchestration
+## Phase 10: Upload Orchestration ✅
+
+**Status:** Complete
 
 **Goal:** Implement the main `uploadBatch()` function.
 
 **Tasks:**
-1. Validate inputs (non-empty batch, valid recipients, path formats)
-2. Resolve duplicate paths
-3. Plan chunks using aggregation engine
-4. Generate manifest key via `generateKey()`
-5. Encrypt all chunks
-6. Build CAR segments
-7. Upload segments sequentially via `ipfsClient.uploadCar()`
-8. Track `UploadState` after each segment
-9. Call progress callbacks at appropriate points
-10. Build and return `BatchResult`
+1. ✅ Validate inputs (non-empty batch, valid recipients, path formats)
+2. ✅ Resolve duplicate paths
+3. ✅ Plan chunks using aggregation engine
+4. ✅ Generate manifest key via `generateKey()`
+5. ✅ Encrypt all chunks
+6. ✅ Build CAR segments (two-pass: first for CID map, second with real manifest)
+7. ✅ Upload segments sequentially via `ipfsClient.uploadCar()`
+8. ✅ Track `UploadState` after each segment
+9. ✅ Call progress callbacks at appropriate points
+10. ✅ Build and return `BatchResult`
+
+**Design Decisions:**
+
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| CID source of truth | `buildCarSegments().chunkCidMap` | Avoids CID divergence between manifest and CAR |
+| Two-pass CAR build | First pass gets CIDs, second builds final | CIDs are deterministic, so same result |
+| Manifest key flow | Generate once, pass to `encryptManifest()` | Avoids generating second key in buildAndEncryptManifest |
+| Empty batch handling | `buildEmptyBatchCar()` helper | buildCarSegments rejects empty chunks array |
+| ChunkRef mapping | Use `EncryptedSegmentInfo` fields directly | offset=encryptedOffset, length=plaintextLength, encryptedLength includes PADME |
+| BatchManifest construction | Built from source data, not re-decrypted | Avoids unnecessary decrypt round-trip |
 
 **Deliverables:**
-- `uploadBatch()` implementation
-- Progress callback integration
-- `UploadState` tracking
+- ✅ `uploadBatch()` implementation with 14-step orchestration
+- ✅ Progress callback integration (`onProgress`)
+- ✅ Segment completion callback (`onSegmentComplete`)
+- ✅ `UploadState` tracking with `chunkCids` populated before upload
+- ✅ `buildEmptyBatchCar()` helper for all-empty-file batches
+- ✅ Upload types: `UploadOptions`, `BatchResult`, `RenamedFile`, `UploadProgress`, `SegmentResult`
 
-**Testing:**
-- End-to-end upload produces valid batch CID
-- Progress callbacks fire in correct sequence
-- Empty files handled correctly
-- Single file batch works
-- Large multi-file batch works
+**Files Created:**
+- `src/upload.ts` — Main upload orchestration (400 lines)
+- `src/upload.test.ts` — Phase A tests (24 tests)
+
+**Files Modified:**
+- `src/types.ts` — Added upload types (UploadOptions, BatchResult, UploadProgress, etc.)
+- `src/index.ts` — Exported Phase 10 types and functions
+- `src/car-builder.ts` — Stricter segmentSize validation (defense in depth)
+
+**Bug Fixes Applied:**
+
+| Issue | Fix |
+|-------|-----|
+| `BatchResult.totalSize` ignored manifest/directory bytes | Now tracks actual bytes uploaded via CAR generator wrapper |
+| Empty batches reported `totalSize: 0` | Now uses `emptyCarResult.carBytes.length` |
+| `segmentSize` accepted NaN/Infinity/non-integers | Added `Number.isFinite()` + `Number.isInteger()` validation |
+| `buildCarSegments()` only checked `<= 0` | Mirrored stricter validation for defense in depth |
+
+**Testing:** 24 tests passing (Phase A expanded)
+
+*Validation:*
+- ✅ Empty files array throws ValidationError
+- ✅ Empty recipients throws ValidationError
+- ✅ Invalid paths throw ValidationError
+
+*segmentSize Validation:*
+- ✅ NaN throws ValidationError
+- ✅ Infinity throws ValidationError
+- ✅ Negative throws ValidationError
+- ✅ Zero throws ValidationError
+- ✅ Non-integer (e.g., 5.5) throws ValidationError
+
+*Single File:*
+- ✅ Small file uploads successfully with dag-pb CID
+- ✅ Returns correct BatchResult structure
+- ✅ BatchResult.manifest has correct FileInfo with ChunkRef
+
+*Round-trip Verification:*
+- ✅ Upload → `cat('/m')` returns valid manifest envelope
+- ✅ Upload → `cat('/{chunkPath}')` returns encrypted chunk
+- ✅ Chunk decrypts correctly with derived file key (includes PADME trim)
+
+*Empty Files:*
+- ✅ Single empty file (0 bytes) uploads with totalSize > 0
+- ✅ All-empty-file batch uses buildEmptyBatchCar path
+- ✅ Mix of empty and non-empty files handled correctly
+- ✅ Empty batch cat(/m) returns valid manifest envelope
+
+*Multi-Segment:*
+- ✅ segmentSize=1 creates expected segments
+- ✅ onSegmentComplete callback fires for each segment
+- ✅ totalSize includes manifest and directory overhead
+
+*Error Handling:*
+- ✅ Upload failure throws SegmentUploadError
+- ✅ SegmentUploadError contains valid UploadState
+- ✅ UploadState has chunkCids populated before upload
+
+**Orchestration Flow:**
+```
+1. VALIDATION → files.length > 0, recipients.length > 0, valid paths
+2. CONFLICT RESOLUTION → resolveConflicts(files)
+3. DIRECTORY BUILDING → buildDirectoryTree(resolvedPaths, directories)
+4. CHUNK PLANNING → planChunks(files, resolvedPaths)
+5. MANIFEST KEY GENERATION → generateKey()
+6. CHUNK ENCRYPTION → encryptChunks(plan, files, manifestKey)
+7. EMPTY BATCH CHECK → buildEmptyBatchCar() if no chunks
+8. FIRST CAR BUILD → get chunkCidMap as single source of truth
+9. BUILD FILE INFO → map PlannedChunkRef + EncryptedSegmentInfo → ChunkRef
+10. MANIFEST ENCRYPTION → buildManifest() + encryptManifest(manifestKey)
+11. FINAL CAR BUILD → buildCarSegments() with real manifest
+12. INITIALIZE UPLOAD STATE → batchId, segments, chunkCids
+13. UPLOAD SEGMENTS → sequential upload with state tracking
+14. BUILD RESULT → BatchManifest from source data
+```
 
 ---
 

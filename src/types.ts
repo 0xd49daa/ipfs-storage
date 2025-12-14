@@ -2,7 +2,14 @@ import type {
   SymmetricKey,
   ContentHash,
   X25519PublicKey,
+  X25519KeyPair,
 } from '@filemanager/encryptionv2';
+
+// Re-export types from errors.ts for upload state tracking
+export type {
+  UploadStateForError as UploadState,
+  SegmentStateForError as SegmentState,
+} from './errors.ts';
 
 // Re-export ChunkEncryption from generated protobuf
 export { ChunkEncryption } from './gen/manifest_pb.ts';
@@ -170,4 +177,108 @@ export interface RecipientInfo {
   publicKey: X25519PublicKey;
   /** Optional device/user label (e.g., "MacBook Pro", "iPhone") */
   label?: string;
+}
+
+// ============================================================================
+// Upload Types (Phase 10)
+// ============================================================================
+
+/**
+ * Options for uploadBatch operation.
+ */
+export interface UploadOptions {
+  /** Sender's key pair for authenticated wrapping */
+  senderKeyPair: X25519KeyPair;
+  /** Recipients who can decrypt the manifest */
+  recipients: RecipientInfo[];
+  /** Explicit directory declarations (for empty dirs or timestamp overrides) */
+  directories?: DirectoryInput[];
+  /** Chunks per CAR segment (default: 10) */
+  segmentSize?: number;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Resume state from previous upload attempt (Phase 11) */
+  resumeState?: import('./errors.ts').UploadStateForError;
+  /** Progress callback */
+  onProgress?: UploadProgressCallback;
+  /** Segment completion callback */
+  onSegmentComplete?: SegmentCompleteCallback;
+}
+
+/**
+ * Result of a successful batch upload.
+ */
+export interface BatchResult {
+  /** Root CID of the uploaded batch */
+  cid: string;
+  /** Decrypted manifest (for caller storage) */
+  manifest: BatchManifest;
+  /** Total encrypted size in bytes */
+  totalSize: number;
+  /** Number of chunks in the batch */
+  chunkCount: number;
+  /** Number of manifests (1 root + N sub-manifests) */
+  manifestCount: number;
+  /** Number of CAR segments uploaded */
+  segmentsUploaded: number;
+  /** Files that were renamed due to conflicts */
+  renamed?: RenamedFile[];
+}
+
+/**
+ * Record of a file that was renamed due to path conflict.
+ */
+export interface RenamedFile {
+  /** Original path from FileInput */
+  originalPath: string;
+  /** Resolved path after conflict resolution */
+  newPath: string;
+}
+
+/**
+ * Upload progress callback type.
+ */
+export type UploadProgressCallback = (progress: UploadProgress) => void;
+
+/**
+ * Upload progress information.
+ */
+export interface UploadProgress {
+  /** Current phase of upload */
+  phase: 'planning' | 'encrypting' | 'building' | 'uploading' | 'finalizing';
+  /** Files processed so far */
+  filesProcessed: number;
+  /** Total files in batch */
+  totalFiles: number;
+  /** Bytes processed so far (ciphertext bytes) */
+  bytesProcessed: number;
+  /** Total bytes to process (plaintext size) */
+  totalBytes: number;
+  /** Current segment being uploaded (1-indexed, during 'uploading' phase) */
+  currentSegment?: number;
+  /** Total segments to upload */
+  totalSegments?: number;
+  /** Chunks skipped due to resume (Phase 11, always 0 in Phase 10) */
+  chunksSkipped?: number;
+}
+
+/**
+ * Segment completion callback type.
+ */
+export type SegmentCompleteCallback = (result: SegmentResult) => void;
+
+/**
+ * Result of a segment upload completion.
+ */
+export interface SegmentResult {
+  /** Segment index that completed (0-based) */
+  index: number;
+  /** Chunks uploaded in this segment */
+  chunksUploaded: number;
+  /** Chunks skipped (Phase 11, always 0 in Phase 10) */
+  chunksSkipped: number;
+  /** Total segments in batch */
+  totalSegments: number;
+  /** Current upload state for persistence */
+  state: import('./errors.ts').UploadStateForError;
 }
