@@ -170,6 +170,12 @@ export class MockIpfsClient implements IpfsClient {
   /** Upload delay in ms */
   private uploadDelay: number;
 
+  /** Latch function called during uploadCar for abort testing */
+  private uploadLatch: (() => Promise<void>) | null = null;
+
+  /** Latch function called during cat for abort testing */
+  private catLatch: (() => Promise<void>) | null = null;
+
   constructor(options?: MockIpfsClientOptions) {
     this.blocks = new Map();
     this.roots = new Set();
@@ -241,6 +247,11 @@ export class MockIpfsClient implements IpfsClient {
       this.roots.add(root.toString());
     }
 
+    // Call latch if set (for abort testing - allows test to trigger abort after segment completes)
+    if (this.uploadLatch) {
+      await this.uploadLatch();
+    }
+
     // Return first root CID if present, empty string for headless CARs
     const firstRoot = roots[0];
     return firstRoot ? firstRoot.toString() : '';
@@ -250,6 +261,11 @@ export class MockIpfsClient implements IpfsClient {
    * Retrieve content from IPFS by CID, optionally with path.
    */
   async *cat(cid: string, path?: string): AsyncIterable<Uint8Array> {
+    // Call latch if set (for abort testing - allows test to trigger abort during fetch)
+    if (this.catLatch) {
+      await this.catLatch();
+    }
+
     if (!path || path === '' || path === '/') {
       // Direct block retrieval
       const bytes = this.blocks.get(cid);
@@ -310,6 +326,42 @@ export class MockIpfsClient implements IpfsClient {
    */
   isRoot(cid: string): boolean {
     return this.roots.has(cid);
+  }
+
+  /**
+   * Set a latch function that uploadCar will await after storing blocks.
+   * Use this for deterministic abort testing - the latch is called after
+   * a segment's blocks are stored, allowing tests to trigger abort between segments.
+   *
+   * @param latch - Async function to await, or null to clear
+   */
+  setUploadLatch(latch: (() => Promise<void>) | null): void {
+    this.uploadLatch = latch;
+  }
+
+  /**
+   * Clear the upload latch. Call in afterEach() to prevent test pollution.
+   */
+  clearUploadLatch(): void {
+    this.uploadLatch = null;
+  }
+
+  /**
+   * Set a latch function that cat will await before yielding data.
+   * Use this for deterministic abort testing - the latch is called before
+   * data is returned, allowing tests to trigger abort during downloads.
+   *
+   * @param latch - Async function to await, or null to clear
+   */
+  setCatLatch(latch: (() => Promise<void>) | null): void {
+    this.catLatch = latch;
+  }
+
+  /**
+   * Clear the cat latch. Call in afterEach() to prevent test pollution.
+   */
+  clearCatLatch(): void {
+    this.catLatch = null;
   }
 
   // ==========================================================================

@@ -31,7 +31,7 @@ import type {
   SegmentStateForError,
 } from './errors.ts';
 
-import { ValidationError, SegmentUploadError, ResumeValidationError } from './errors.ts';
+import { ValidationError, SegmentUploadError, ResumeValidationError, AbortUploadError } from './errors.ts';
 import { resolveConflicts } from './conflicts.ts';
 import { buildDirectoryTree } from './directories.ts';
 import { planChunks } from './chunk-plan.ts';
@@ -244,10 +244,31 @@ async function buildEmptyBatchCar(
 
 /**
  * Check if abort signal is triggered and throw if so.
+ * If state is provided, throws AbortUploadError with state for resume.
+ * Otherwise throws standard DOMException.
+ *
+ * @param signal - AbortSignal to check
+ * @param state - Optional upload state to include in error for resume
  */
-function checkAbort(signal?: AbortSignal): void {
+function checkAbortWithState(signal?: AbortSignal, state?: UploadStateForError): void {
   if (signal?.aborted) {
-    throw new DOMException('Upload aborted', 'AbortError');
+    if (state) {
+      throw new AbortUploadError(state, signal.reason);
+    }
+    // Early abort before state exists - use standard DOMException with reason
+    // Note: signal.reason may be undefined, a string, an Error, or a DOMException
+    const reason = signal.reason;
+    let message: string;
+    if (reason === undefined || reason === null) {
+      message = 'Upload aborted';
+    } else if (reason instanceof Error) {
+      message = reason.message;
+    } else if (typeof reason === 'string') {
+      message = reason;
+    } else {
+      message = 'Upload aborted';
+    }
+    throw new DOMException(message, 'AbortError');
   }
 }
 
@@ -420,7 +441,7 @@ export async function uploadBatch(
     totalBytes,
   });
 
-  checkAbort(signal);
+  checkAbortWithState(signal);
 
   const chunkPlan = await planChunks(files, resolvedPaths);
 
@@ -430,7 +451,7 @@ export async function uploadBatch(
     : await generateKey();
 
   // === PHASE 6: CHUNK ENCRYPTION ===
-  checkAbort(signal);
+  checkAbortWithState(signal);
 
   const encryptedChunks: EncryptedChunk[] = [];
   let bytesProcessed = 0;
@@ -444,7 +465,7 @@ export async function uploadBatch(
     encryptedChunks.push(chunk);
     bytesProcessed += chunk.encryptedSize;
 
-    checkAbort(signal);
+    checkAbortWithState(signal);
 
     onProgress?.({
       phase: 'encrypting',
@@ -526,7 +547,7 @@ export async function uploadBatch(
     }
 
     // Upload single segment
-    checkAbort(signal);
+    checkAbortWithState(signal, uploadState);
 
     onProgress?.({
       phase: 'uploading',
@@ -550,6 +571,9 @@ export async function uploadBatch(
       await ipfsClient.uploadCar(carGenerator());
       uploadState.segments[0]!.status = 'complete';
 
+      // Check abort after segment completes (honors abort even on final segment)
+      checkAbortWithState(signal, uploadState);
+
       onSegmentComplete?.({
         index: 0,
         chunksUploaded: 0,
@@ -558,6 +582,10 @@ export async function uploadBatch(
         state: { ...uploadState },
       });
     } catch (error) {
+      // Re-throw AbortUploadError as-is (don't wrap in SegmentUploadError)
+      if (error instanceof AbortUploadError) {
+        throw error;
+      }
       uploadState.segments[0]!.status = 'failed';
       uploadState.segments[0]!.error =
         error instanceof Error ? error.message : String(error);
@@ -601,6 +629,8 @@ export async function uploadBatch(
   }
 
   // === PHASE 8: FIRST CAR BUILD - GET CID MAP ===
+  checkAbortWithState(signal); // Check before potentially expensive CAR build
+
   onProgress?.({
     phase: 'building',
     filesProcessed: files.length,
@@ -619,6 +649,8 @@ export async function uploadBatch(
   });
 
   // === PHASE 9: BUILD FILE INFO WITH CIDS ===
+  checkAbortWithState(signal); // Check after first CAR build
+
   const fileInfos = buildFileInfoArray(
     files,
     resolvedPaths,
@@ -643,6 +675,8 @@ export async function uploadBatch(
   });
 
   // === PHASE 11: FINAL CAR BUILD ===
+  checkAbortWithState(signal); // Check before final CAR build
+
   const carResult = await buildCarSegments({
     chunks: encryptedChunks,
     manifest: envelope,
@@ -687,7 +721,7 @@ export async function uploadBatch(
   let totalBytesUploaded = 0;
 
   for (const segment of carResult.segments) {
-    checkAbort(signal);
+    checkAbortWithState(signal, uploadState);
 
     uploadState.segments[segment.segmentIndex]!.status = 'uploading';
 
@@ -718,6 +752,9 @@ export async function uploadBatch(
       uploadState.segments[segment.segmentIndex]!.status = 'complete';
       segmentsUploaded++;
 
+      // Check abort after segment completes (honors abort even on final segment)
+      checkAbortWithState(signal, uploadState);
+
       onSegmentComplete?.({
         index: segment.segmentIndex,
         chunksUploaded: segment.chunkCount,
@@ -726,6 +763,10 @@ export async function uploadBatch(
         state: { ...uploadState },
       });
     } catch (error) {
+      // Re-throw AbortUploadError as-is (don't wrap in SegmentUploadError)
+      if (error instanceof AbortUploadError) {
+        throw error;
+      }
       uploadState.segments[segment.segmentIndex]!.status = 'failed';
       uploadState.segments[segment.segmentIndex]!.error =
         error instanceof Error ? error.message : String(error);

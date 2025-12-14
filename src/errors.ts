@@ -159,5 +159,34 @@ export class ResumeValidationError extends IpfsStorageError {
   }
 }
 
+/**
+ * Upload aborted by user via AbortSignal.
+ * Contains UploadState for resume capability.
+ *
+ * The error name is 'AbortError' for Web API compatibility.
+ * If the abort signal included a custom reason, it is preserved
+ * in the `reason` property and (if an Error) as `cause`.
+ */
+export class AbortUploadError extends IpfsStorageError {
+  readonly state: UploadStateForError;
+  readonly reason: unknown;
+
+  constructor(state: UploadStateForError, reason?: unknown) {
+    const message =
+      reason instanceof Error
+        ? reason.message
+        : typeof reason === 'string'
+          ? reason
+          : 'Upload aborted';
+    super(message);
+    this.name = 'AbortError';
+    this.state = state;
+    this.reason = reason;
+    if (reason instanceof Error) {
+      this.cause = reason;
+    }
+  }
+}
+
 // Re-export encryption errors for convenience
 export { EncryptionError, ErrorCode } from '@filemanager/encryptionv2';

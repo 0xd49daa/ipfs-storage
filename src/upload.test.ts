@@ -1316,3 +1316,325 @@ describe('uploadBatch - resume (Phase 11)', () => {
     });
   });
 });
+
+// ============================================================================
+// Phase 12: AbortSignal Integration Tests
+// ============================================================================
+
+import { AbortUploadError } from './index.ts';
+
+describe('uploadBatch - AbortSignal integration (Phase 12)', () => {
+  test('abort before encryption throws DOMException', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput('test content', '/test.txt');
+
+    // Abort immediately before upload starts
+    const controller = new AbortController();
+    controller.abort();
+
+    try {
+      await uploadBatch(
+        [file],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      // Early abort throws DOMException (no state available yet)
+      // When abort() is called without reason, browser/runtime uses default message
+      expect(error).toBeInstanceOf(DOMException);
+      expect((error as DOMException).name).toBe('AbortError');
+      // Default abort reason is "The operation was aborted." (Web API standard)
+    }
+  });
+
+  test('abort after segment completes throws AbortUploadError with state', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+
+    // Create multiple files to ensure multiple segments with segmentSize=1
+    const files = [
+      await createFileInput('File A content for segment test', '/a.txt'),
+      await createFileInput('File B content for segment test', '/b.txt'),
+    ];
+
+    const controller = new AbortController();
+    let segmentCount = 0;
+
+    // Latch that aborts after first segment completes
+    ipfsClient.setUploadLatch(async () => {
+      segmentCount++;
+      if (segmentCount === 1) {
+        controller.abort();
+      }
+    });
+
+    try {
+      await uploadBatch(
+        files,
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+          segmentSize: 1, // Force multiple segments
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+      expect(abortError.name).toBe('AbortError');
+      expect(abortError.state).toBeDefined();
+      expect(abortError.state.batchId).toBeTruthy();
+      expect(abortError.state.segments.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+
+  test('AbortUploadError.state is valid for resume', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput('Resume test content', '/test.txt');
+
+    const controller = new AbortController();
+
+    // Abort after segment upload completes
+    ipfsClient.setUploadLatch(async () => {
+      controller.abort();
+    });
+
+    let abortState: UploadStateForError | null = null;
+    try {
+      await uploadBatch(
+        [file],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      if (error instanceof AbortUploadError) {
+        abortState = error.state;
+      }
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+
+    expect(abortState).not.toBeNull();
+
+    // Verify state structure for resume
+    expect(abortState!.batchId).toBeTruthy();
+    expect(abortState!.manifestCid).toBeTruthy();
+    expect(abortState!.rootCid).toBeTruthy();
+    expect(abortState!.manifestKeyBase64).toBeTruthy();
+    expect(abortState!.segments.length).toBeGreaterThan(0);
+
+    // manifestKeyBase64 should be valid base64 and 32 bytes
+    const keyBytes = Uint8Array.from(atob(abortState!.manifestKeyBase64), c => c.charCodeAt(0));
+    expect(keyBytes.length).toBe(32);
+  });
+
+  test('completed segments have status=complete in abort state', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+
+    // Create files that will produce multiple chunks (larger data)
+    const largeContent = 'x'.repeat(50000); // 50KB each
+    const files = [
+      await createFileInput(largeContent + 'A', '/a.txt'),
+      await createFileInput(largeContent + 'B', '/b.txt'),
+    ];
+
+    const controller = new AbortController();
+    let segmentCount = 0;
+
+    // Abort after first segment
+    ipfsClient.setUploadLatch(async () => {
+      segmentCount++;
+      if (segmentCount === 1) {
+        controller.abort();
+      }
+    });
+
+    try {
+      await uploadBatch(
+        files,
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+          segmentSize: 1,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+
+      // First segment should be marked complete
+      expect(abortError.state.segments[0]!.status).toBe('complete');
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+
+  test('preserves custom abort reason in error', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput('Reason test content', '/test.txt');
+
+    const controller = new AbortController();
+    const customReason = 'User cancelled the upload';
+
+    // Abort with custom reason after segment
+    ipfsClient.setUploadLatch(async () => {
+      controller.abort(customReason);
+    });
+
+    try {
+      await uploadBatch(
+        [file],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+
+      // Reason should be preserved
+      expect(abortError.reason).toBe(customReason);
+      expect(abortError.message).toBe(customReason);
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+
+  test('abort after empty batch upload throws AbortUploadError', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+
+    // Create empty file
+    const emptyFile: FileInput = {
+      file: new File([], 'empty.txt'),
+      path: '/empty.txt',
+      contentHash: await hashString(''),
+    };
+
+    const controller = new AbortController();
+
+    // Abort after empty batch segment upload
+    ipfsClient.setUploadLatch(async () => {
+      controller.abort();
+    });
+
+    try {
+      await uploadBatch(
+        [emptyFile],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+      expect(abortError.state).toBeDefined();
+      expect(abortError.state.segments[0]!.status).toBe('complete');
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+
+  test('abort during final segment is honored after completion', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput('Final segment test', '/test.txt');
+
+    const controller = new AbortController();
+
+    // Abort after the (only) segment completes
+    ipfsClient.setUploadLatch(async () => {
+      controller.abort();
+    });
+
+    try {
+      await uploadBatch(
+        [file],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown - abort should be honored even after final segment');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+
+      // Segment should be complete (upload finished) but we still throw
+      expect(abortError.state.segments[0]!.status).toBe('complete');
+
+      // All data should have been uploaded before abort
+      expect(ipfsClient.getBlockCount()).toBeGreaterThan(0);
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+
+  test('early abort with custom Error reason preserves cause', async () => {
+    const keyPair = await createTestKeyPair();
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput('Error reason test', '/test.txt');
+
+    const controller = new AbortController();
+    const customError = new Error('Network timeout');
+
+    // Abort with Error reason after segment
+    ipfsClient.setUploadLatch(async () => {
+      controller.abort(customError);
+    });
+
+    try {
+      await uploadBatch(
+        [file],
+        {
+          senderKeyPair: keyPair,
+          recipients: [{ publicKey: keyPair.publicKey }],
+          signal: controller.signal,
+        },
+        ipfsClient
+      );
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AbortUploadError);
+      const abortError = error as AbortUploadError;
+
+      // Error reason should be preserved
+      expect(abortError.reason).toBe(customError);
+      expect(abortError.cause).toBe(customError);
+      expect(abortError.message).toBe('Network timeout');
+    } finally {
+      ipfsClient.clearUploadLatch();
+    }
+  });
+});

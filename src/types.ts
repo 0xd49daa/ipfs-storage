@@ -195,7 +195,17 @@ export interface UploadOptions {
   directories?: DirectoryInput[];
   /** Chunks per CAR segment (default: 10) */
   segmentSize?: number;
-  /** AbortSignal for cancellation */
+  /**
+   * AbortSignal for cancellation.
+   *
+   * Abort behavior by phase:
+   * - **Before upload state exists** (planning, encryption): throws `DOMException` with name `'AbortError'`
+   * - **After upload state exists** (during upload): throws `AbortUploadError` with `state` for resume
+   * - Current segment always completes before abort takes effect
+   *
+   * If the signal has a custom `reason`, it is preserved in the error message and
+   * (for `AbortUploadError`) in the `reason` property.
+   */
   signal?: AbortSignal;
   /**
    * Resume state from previous upload attempt.
@@ -304,3 +314,156 @@ export interface SegmentResult {
   /** Current upload state for persistence */
   state: import('./errors.ts').UploadStateForError;
 }
+
+// ============================================================================
+// Manifest Retrieval Types (Phase 13)
+// ============================================================================
+
+/**
+ * Options for manifest retrieval.
+ */
+export interface GetManifestOptions {
+  /** IPFS client for content retrieval */
+  ipfsClient: import('./ipfs-client.ts').IpfsClient;
+  /** Recipient's key pair for unwrapping the manifest key */
+  recipientKeyPair: X25519KeyPair;
+  /**
+   * Expected sender's public key for authenticated unwrapping.
+   * Required per spec - must match the senderPublicKey in the recipient record.
+   * Prevents swapped-sender attacks where an attacker replaces the sender key in the envelope.
+   */
+  expectedSenderPublicKey: X25519PublicKey;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+}
+
+// ============================================================================
+// Download Types (Phase 14)
+// ============================================================================
+
+/**
+ * Reference for downloading a single file.
+ * Construct from BatchManifest fields after calling getManifest().
+ */
+export interface FileDownloadRef {
+  /** Batch root CID */
+  batchCid: string;
+  /** File path (for error messages) */
+  path: string;
+  /** Original file size in bytes */
+  size: number;
+  /** BLAKE2b content hash for key derivation and verification */
+  contentHash: ContentHash;
+  /** Manifest key for deriving file encryption key */
+  manifestKey: SymmetricKey;
+  /** Chunk references for this file */
+  chunks: ChunkRef[];
+}
+
+/**
+ * Options for single file download.
+ * Matches spec exactly - ipfsClient is passed as separate param to downloadFile().
+ */
+export interface DownloadOptions {
+  /** Retry attempts per chunk (default: 3) */
+  retries?: number;
+  /** Parallel chunk fetch concurrency (default: 3) */
+  chunkConcurrency?: number;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Progress callback */
+  onProgress?: DownloadProgressCallback;
+  /** Integrity verification mode (default: 'strict') */
+  integrityMode?: 'strict' | 'warn';
+  /** Callback for integrity errors in 'warn' mode */
+  onIntegrityError?: (error: import('./errors.ts').IntegrityError) => void;
+}
+
+/**
+ * Download progress callback type.
+ */
+export type DownloadProgressCallback = (progress: DownloadProgress) => void;
+
+/**
+ * Download progress information.
+ */
+export interface DownloadProgress {
+  /** Decrypted bytes yielded so far */
+  bytesDownloaded: number;
+  /** Total file size */
+  totalBytes: number;
+}
+
+// ============================================================================
+// Multi-File Download Types (Phase 15)
+// ============================================================================
+
+/**
+ * Options for multi-file download.
+ */
+export interface DownloadFilesOptions {
+  /** Parallel file downloads (default: 3) */
+  concurrency?: number;
+  /** Parallel chunk fetch per file (default: 3) */
+  chunkConcurrency?: number;
+  /** Retry attempts per chunk (default: 3) */
+  retries?: number;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Progress callback for aggregate progress */
+  onProgress?: MultiDownloadProgressCallback;
+  /**
+   * Error callback for handling per-file errors.
+   * If provided, errors are reported but download continues.
+   * If not provided, first error throws and aborts remaining downloads.
+   */
+  onError?: DownloadErrorCallback;
+  /** Integrity verification mode (default: 'strict') */
+  integrityMode?: 'strict' | 'warn';
+  /** Callback for integrity errors in 'warn' mode */
+  onIntegrityError?: (error: import('./errors.ts').IntegrityError) => void;
+}
+
+/**
+ * Result of downloading a single file from a batch.
+ */
+export interface DownloadedFile {
+  /** File path */
+  path: string;
+  /** Original file size in bytes */
+  size: number;
+  /** Decrypted file content as async iterable */
+  content: AsyncIterable<Uint8Array>;
+}
+
+/**
+ * Multi-file download progress callback type.
+ */
+export type MultiDownloadProgressCallback = (
+  progress: MultiDownloadProgress
+) => void;
+
+/**
+ * Multi-file download progress information.
+ */
+export interface MultiDownloadProgress {
+  /** Number of files completely downloaded */
+  filesCompleted: number;
+  /** Total number of files to download */
+  totalFiles: number;
+  /** Total bytes downloaded across all files */
+  bytesDownloaded: number;
+  /** Total bytes to download across all files */
+  totalBytes: number;
+  /** Path of file currently being downloaded (if any) */
+  currentFile?: string;
+}
+
+/**
+ * Error callback type for multi-file download.
+ * Called when a file fails; download continues if provided.
+ */
+export type DownloadErrorCallback = (
+  error: Error,
+  file: FileDownloadRef
+) => void;

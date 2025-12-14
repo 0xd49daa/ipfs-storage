@@ -18,6 +18,7 @@ export {
   SegmentUploadError,
   CidMismatchError,
   ResumeValidationError,
+  AbortUploadError,
 } from './errors.ts';
 
 // Re-export encryption types for convenience
@@ -179,4 +180,27 @@ export type {
   SegmentState,
   SegmentCompleteCallback,
   SegmentResult,
+} from './types.ts';
+
+// Manifest retrieval (Phase 13)
+export { getManifest } from './manifest-retrieval.ts';
+export type { GetManifestOptions } from './types.ts';
+
+// Download (Phase 14)
+export { downloadFile } from './download.ts';
+export type {
+  FileDownloadRef,
+  DownloadOptions,
+  DownloadProgressCallback,
+  DownloadProgress,
+} from './types.ts';
+
+// Multi-file download (Phase 15)
+export { downloadFiles } from './download-files.ts';
+export type {
+  DownloadFilesOptions,
+  DownloadedFile,
+  MultiDownloadProgressCallback,
+  MultiDownloadProgress,
+  DownloadErrorCallback,
 } from './types.ts';
