@@ -12,9 +12,6 @@ import {
   type ContentHash,
 } from '@filemanager/encryptionv2';
 import {
-  downloadFile,
-  uploadBatch,
-  getManifest,
   MockIpfsClient,
   ValidationError,
   IntegrityError,
@@ -25,6 +22,9 @@ import {
   type DownloadProgress,
   type BatchManifest,
 } from './index.ts';
+import { downloadFile } from './download.ts';
+import { uploadBatch } from './upload.ts';
+import { getManifest } from './manifest-retrieval.ts';
 
 // ============================================================================
 // Test Helpers

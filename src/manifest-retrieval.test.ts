@@ -16,27 +16,30 @@ import {
   type X25519KeyPair,
 } from '@filemanager/encryptionv2';
 import {
-  getManifest,
-  uploadBatch,
   MockIpfsClient,
   ValidationError,
   ManifestError,
+  type FileInput,
+} from './index.ts';
+import { getManifest } from './manifest-retrieval.ts';
+import { uploadBatch } from './upload.ts';
+import {
   encodeManifestEnvelope,
   encodeRootManifest,
   encodeSubManifest,
-  deriveFileKey,
-  decryptSingleShot,
-  chunkIdToPath,
-  MANIFEST_DOMAIN,
-  type FileInput,
-  type GetManifestOptions,
-  type RecipientKeyInfo,
-  type RootManifestData,
-  type SubManifestData,
-  type ManifestEnvelopeData,
-} from './index.ts';
+} from './serialization.ts';
+import { deriveFileKey } from './crypto.ts';
+import { decryptSingleShot } from './chunk-encrypt.ts';
+import { chunkIdToPath } from './chunk-id.ts';
+import { MANIFEST_DOMAIN, NONCE_SIZE } from './constants.ts';
 import { asChunkId } from './branded.ts';
-import { NONCE_SIZE } from './constants.ts';
+import type {
+  GetManifestOptions,
+  RecipientKeyInfo,
+  RootManifestData,
+  SubManifestData,
+  ManifestEnvelopeData,
+} from './types.ts';
 
 // ============================================================================
 // Test Helpers

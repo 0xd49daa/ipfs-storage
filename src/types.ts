@@ -467,3 +467,79 @@ export type DownloadErrorCallback = (
   error: Error,
   file: FileDownloadRef
 ) => void;
+
+// ============================================================================
+// Module Factory Types (Phase 17)
+// ============================================================================
+
+/**
+ * Configuration for creating an IPFS storage module instance.
+ */
+export interface IpfsStorageConfig {
+  /** IPFS client for upload/download operations */
+  ipfsClient: import('./ipfs-client.ts').IpfsClient;
+  /** Chunk size in bytes (default: 10MB) */
+  chunkSize?: number;
+  /** Threshold for streaming encryption (default: 10MB) */
+  streamingThreshold?: number;
+}
+
+/**
+ * Options for manifest retrieval via module.getManifest().
+ * Unlike GetManifestOptions, ipfsClient is bound to the module.
+ */
+export interface ReadOptions {
+  /** Recipient's key pair for unwrapping the manifest key */
+  recipientKeyPair: X25519KeyPair;
+  /**
+   * Expected sender's public key for authenticated unwrapping.
+   * Must match the senderPublicKey in the manifest envelope.
+   */
+  expectedSenderPublicKey: X25519PublicKey;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+}
+
+/**
+ * IPFS storage module with bound IPFS client.
+ * Created via createIpfsStorageModule().
+ */
+export interface IpfsStorageModule {
+  /**
+   * Upload a batch of files to IPFS with encryption.
+   * @param files - Files to upload
+   * @param options - Upload options (sender key, recipients, etc.)
+   * @returns Batch result with CID and manifest
+   */
+  uploadBatch(files: FileInput[], options: UploadOptions): Promise<BatchResult>;
+
+  /**
+   * Retrieve and decrypt a batch manifest from IPFS.
+   * @param batchCid - Root CID of the batch
+   * @param options - Read options (recipient key pair, expected sender)
+   * @returns Decrypted batch manifest
+   */
+  getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest>;
+
+  /**
+   * Download and decrypt a single file from a batch.
+   * @param file - File download reference (from manifest)
+   * @param options - Download options (retries, concurrency, etc.)
+   * @returns Async iterable of decrypted file chunks
+   */
+  downloadFile(
+    file: FileDownloadRef,
+    options?: DownloadOptions
+  ): AsyncIterable<Uint8Array>;
+
+  /**
+   * Download and decrypt multiple files from a batch.
+   * @param files - File download references (from manifest)
+   * @param options - Download options (concurrency, error handling, etc.)
+   * @returns Async iterable of downloaded files
+   */
+  downloadFiles(
+    files: FileDownloadRef[],
+    options?: DownloadFilesOptions
+  ): AsyncIterable<DownloadedFile>;
+}

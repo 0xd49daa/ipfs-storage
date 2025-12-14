@@ -14,21 +14,20 @@ import {
   type ContentHash,
 } from '@filemanager/encryptionv2';
 import {
-  uploadBatch,
   MockIpfsClient,
   ValidationError,
   SegmentUploadError,
-  decodeManifestEnvelope,
-  decodeRootManifest,
-  decryptSingleShot,
-  deriveFileKey,
-  chunkIdToPath,
   type FileInput,
   type UploadOptions,
   type BatchResult,
   type UploadProgress,
   type SegmentResult,
 } from './index.ts';
+import { uploadBatch } from './upload.ts';
+import { decodeManifestEnvelope, decodeRootManifest } from './serialization.ts';
+import { decryptSingleShot } from './chunk-encrypt.ts';
+import { deriveFileKey } from './crypto.ts';
+import { chunkIdToPath } from './chunk-id.ts';
 import { asChunkId } from './branded.ts';
 
 // ============================================================================

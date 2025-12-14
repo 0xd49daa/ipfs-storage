@@ -8,19 +8,19 @@ import { CarBufferReader } from '@ipld/car';
 import * as dagPb from '@ipld/dag-pb';
 import * as raw from 'multiformats/codecs/raw';
 import { preloadSodium } from '@filemanager/encryptionv2';
+import { MockIpfsClient, ValidationError } from './index.ts';
 import {
   buildBatchDirectory,
   buildCarSegments,
   type CarBlock,
-  type EncryptedChunk,
   type CarSegmentGenerator,
-} from './index.ts';
+} from './car-builder.ts';
+import type { EncryptedChunk } from './chunk-encrypt.ts';
 import { generateChunkId, chunkIdToPath } from './chunk-id.ts';
-import { MockIpfsClient, computeRawCid, computeDagPbCid } from './ipfs-client.ts';
+import { computeRawCid, computeDagPbCid } from './ipfs-client.ts';
 import { ChunkEncryption } from './gen/manifest_pb.ts';
 import type { ChunkId } from './branded.ts';
 import { asChunkId } from './branded.ts';
-import { ValidationError } from './errors.ts';
 
 // ============================================================================
 // Test Helpers

@@ -1,11 +1,5 @@
 import { describe, test, expect } from 'bun:test';
 import {
-  DOMAIN,
-  CHUNK_SIZE,
-  deriveFileKey,
-  asChunkId,
-  asBatchCid,
-  asFilePath,
   IpfsStorageError,
   ValidationError,
   IntegrityError,
@@ -14,6 +8,9 @@ import {
   SegmentUploadError,
   CidMismatchError,
 } from './index.ts';
+import { DOMAIN, CHUNK_SIZE } from './constants.ts';
+import { deriveFileKey } from './crypto.ts';
+import { asChunkId, asBatchCid, asFilePath } from './branded.ts';
 import {
   generateKey,
   hashBlake2b,
