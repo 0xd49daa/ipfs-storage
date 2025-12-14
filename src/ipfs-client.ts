@@ -219,11 +219,8 @@ export class MockIpfsClient implements IpfsClient {
       );
     }
 
-    // Get roots
+    // Get roots (may be empty for headless CAR segments)
     const roots = reader.getRoots();
-    if (roots.length === 0) {
-      throw new IpfsUploadError('CAR file has no roots');
-    }
 
     // Collect all blocks first (for atomicity)
     const newBlocks: Array<{ cidStr: string; bytes: Uint8Array }> = [];
@@ -244,12 +241,9 @@ export class MockIpfsClient implements IpfsClient {
       this.roots.add(root.toString());
     }
 
-    // Return first root CID (already checked length > 0 above)
+    // Return first root CID if present, empty string for headless CARs
     const firstRoot = roots[0];
-    if (!firstRoot) {
-      throw new IpfsUploadError('CAR file has no roots');
-    }
-    return firstRoot.toString();
+    return firstRoot ? firstRoot.toString() : '';
   }
 
   /**

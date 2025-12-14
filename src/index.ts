@@ -136,3 +136,14 @@ export type {
   EncryptChunkOptions,
   FileDataProvider,
 } from './chunk-encrypt.ts';
+
+// CAR builder (Phase 8)
+export { buildBatchDirectory, buildCarSegments } from './car-builder.ts';
+export type {
+  CarBlock,
+  BuildBatchDirectoryOptions,
+  BatchDirectoryResult,
+  BuildCarSegmentsOptions,
+  CarSegmentGenerator,
+  CarSegmentsResult,
+} from './car-builder.ts';

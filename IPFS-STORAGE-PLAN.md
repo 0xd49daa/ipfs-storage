@@ -338,28 +338,122 @@ This plan breaks down the implementation into logical phases, ordered by depende
 
 ---
 
-## Phase 8: CAR File Generation
+## Phase 8: CAR File Generation ✅
 
-**Goal:** Build UnixFS directory structure and generate CAR files.
+**Status:** Complete
 
-**Tasks:**
-1. Build UnixFS directory tree matching batch structure (`/XX/YY/chunkId`)
-2. Add encrypted chunks as file nodes
-3. Add manifest as `/m` file
-4. Implement CAR writer using `@ipld/car`
-5. Compute root CID from directory structure
-6. Implement segmented CAR generation (10 chunks per segment)
+**Goal:** Build UnixFS directory structure and generate CAR files for IPFS upload.
+
+**Design Decisions:**
+
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| Chunk codec | raw (0x55) | Opaque encrypted bytes, no structure |
+| Manifest `/m` codec | raw (0x55) | Opaque encrypted bytes |
+| Sub-manifest `/m_N` codec | raw (0x55) | Opaque encrypted bytes (same as manifest) |
+| Directory codec | dag-pb (0x70) | UnixFS directory standard for path resolution |
+| Directory placement | Final segment only | All CIDs known upfront; atomic completion; simpler resume |
+| Manifest placement | Final segment, linked from root | Ensures chunks exist before manifest references them |
+| Sub-manifests | Final segment as `/m_0`, `/m_1`, ... | Same rationale as manifest |
+| Non-final CAR roots | `roots: []` (empty) | Avoids "root not present" validation errors on headless segments |
+| Final CAR roots | `roots: [rootCid]` | Standard single-root CAR |
+| Link ordering | Byte-wise compare (`a < b ? -1 : a > b ? 1 : 0`) | Locale-independent determinism |
+
+**Segment Layout:**
+```
+Segment 0:     roots: []                  ← empty roots (headless CAR)
+               [chunk0..chunk9]           ← raw blocks only
+
+Segment 1:     roots: []                  ← empty roots (headless CAR)
+               [chunk10..chunk19]         ← raw blocks only
+...
+Segment N-1:   roots: [rootCid]           ← real root declared
+               [remaining chunks]         ← raw blocks
+               [level-2 dirs: 6B/v7, ...]  ← dag-pb directories
+               [level-1 dirs: 6B, 9c, ...] ← dag-pb directories
+               [root directory]            ← links to level-1 + manifests
+               [/m manifest]               ← encrypted root manifest
+               [/m_0, /m_1, ...]           ← sub-manifests if any
+```
+
+**Determinism Rules (for identical CARs on re-upload):**
+
+| Aspect | Rule |
+|--------|------|
+| Directory link order | Links sorted by byte-wise string comparison (NOT localeCompare) |
+| PBLink.Tsize | Size of the **linked block's encoded bytes** (NOT cumulative subtree) |
+| Block write order | Chunks in input order → level-2 dirs (sorted) → level-1 dirs (sorted) → root → manifest → sub-manifests |
+| CAR header | Version 1, roots as specified above |
 
 **Deliverables:**
-- `buildBatchDirectory()` function
-- `generateCarSegment()` function
-- Root CID computation
+- ✅ `buildBatchDirectory(options): Promise<BatchDirectoryResult>` — builds UnixFS tree
+- ✅ `buildCarSegments(options): Promise<CarSegmentsResult>` — creates segment generators
+- ✅ `CarBlock`, `BatchDirectoryResult`, `CarSegmentGenerator`, `CarSegmentsResult` types
+- ✅ Input validation (empty chunks, empty manifest, empty sub-manifests, segmentSize <= 0)
 
-**Testing:**
-- Generated CAR is valid and parseable
-- Root CID matches expected structure
-- Segment boundaries correct
-- Paths within CAR follow spec hierarchy
+**Files Created:**
+- `src/car-builder.ts` — CAR generation logic (350 lines)
+- `src/car-builder.test.ts` — 42 unit tests
+
+**Files Modified:**
+- `src/index.ts` — Export CAR builder types and functions
+- `src/ipfs-client.ts` — Updated MockIpfsClient to support headless CARs (empty roots)
+
+**Testing:** 42 tests passing
+
+*Input Validation:*
+- ✅ Empty chunks array throws ValidationError
+- ✅ Empty manifest throws ValidationError
+- ✅ Chunk with empty encryptedData throws ValidationError
+- ✅ Zero-length sub-manifest throws ValidationError
+- ✅ segmentSize <= 0 throws ValidationError
+
+*CID & Codec:*
+- ✅ Chunks use raw codec (0x55), CID prefix `bafkrei...`
+- ✅ Manifest `/m` uses raw codec (0x55), CID prefix `bafkrei...`
+- ✅ Sub-manifests `/m_0`, `/m_1` use raw codec (0x55), CID prefix `bafkrei...`
+- ✅ Directories use dag-pb codec (0x70), CID prefix `bafybei...`
+- ✅ Same input → same CID (deterministic)
+
+*Directory Structure:*
+- ✅ Level-2 dirs contain chunk links with correct Tsize
+- ✅ Level-1 dirs contain level-2 dir links with correct Tsize
+- ✅ Root dir contains level-1 dirs + manifest + sub-manifests
+- ✅ All directory links sorted lexicographically by Name
+- ✅ Tsize for dir links equals encoded dir bytes, not subtree sum
+
+*Segmentation:*
+- ✅ Single segment: 1-10 chunks → 1 segment with `isLast: true`
+- ✅ Multi-segment: 25 chunks → 3 segments (10 + 10 + 5+dirs+manifest)
+- ✅ Exact boundaries: 10, 20 chunks produce correct segment counts
+- ✅ Non-final segments: raw blocks only, `roots: []` (empty)
+- ✅ Final segment: chunks + dirs + manifest, `roots: [rootCid]`
+- ✅ Custom segmentSize parameter works correctly
+
+*CAR Validity:*
+- ✅ Non-final CARs parseable with empty roots
+- ✅ Final CAR parseable with single root
+- ✅ All blocks in CAR have valid CIDs matching content
+- ✅ CAR header roots match segment.roots
+- ✅ Manifests only in final segment CAR
+
+*Determinism:*
+- ✅ Re-generate same fixed chunks produces byte-identical CAR
+- ✅ Directory link order is byte-wise sorted (not locale-dependent)
+- ✅ chunkCidMap entries match actual block CIDs
+
+*Round-trip with MockIpfsClient:*
+- ✅ Upload all segments → `cat(rootCid, '/m')` returns manifest bytes
+- ✅ Upload all segments → `cat(rootCid, '/6B/v7/chunkId')` returns chunk bytes
+- ✅ Upload all segments → `cat(rootCid, '/m_0')` returns first sub-manifest
+- ✅ 15 chunks batch: all paths resolve correctly
+
+*Edge Cases:*
+- ✅ Empty `subManifests` array → no `/m_N` links
+- ✅ 1-byte chunk works correctly
+- ✅ Chunk IDs with leading `1` (base58 edge case) resolve
+- ✅ Many chunks in same level-2 dir work correctly
+- ✅ Sub-manifests array with 3 entries all accessible
 
 ---
 
