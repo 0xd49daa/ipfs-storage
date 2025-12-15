@@ -1,6 +1,7 @@
 {
   "name": "@filemanager/ipfs-storage",
   "version": "0.1.0",
+  "description": "Browser-first TypeScript library for IPFS-based encrypted batch storage",
   "type": "module",
   "module": "src/index.ts",
   "types": "src/index.ts",
