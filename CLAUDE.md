@@ -11,6 +11,12 @@ Browser-first TypeScript library for IPFS-based encrypted batch storage. Statele
 **Serialization:** Protocol Buffers
 **Crypto:** `@0xd49daa/safecrypt`
 
+## Version Management
+
+When updating the package version, update both files:
+- `package.json` — npm/bun version
+- `jsr.json` — JSR registry version
+
 ## Development Commands
 
 ```bash
