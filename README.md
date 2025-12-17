@@ -1,5 +1,7 @@
 # @0xd49daa/ipfs-storage
 
+[![JSR](https://jsr.io/badges/@0xd49daa/ipfs-storage)](https://jsr.io/@0xd49daa/ipfs-storage)
+
 Browser-first TypeScript library for IPFS-based encrypted batch storage with self-custody keys, multi-recipient support, and resumable uploads.
 
 ## Motivation
@@ -59,7 +61,14 @@ This package provides these primitives as a tested, minimal library.
 ## Installation
 
 ```bash
-bun add @0xd49daa/ipfs-storage
+# JSR (recommended)
+bunx jsr add @0xd49daa/ipfs-storage
+
+# npm via JSR
+npx jsr add @0xd49daa/ipfs-storage
+
+# Deno
+deno add jsr:@0xd49daa/ipfs-storage
 ```
 
 ## Quick Start
