@@ -20,7 +20,8 @@ import {
   deriveEncryptionKeyPair,
   hashBlake2b,
   type X25519KeyPair,
-} from '@filemanager/encryptionv2';
+  type ContentHash,
+} from '@0xd49daa/safecrypt';
 
 // Test mnemonic for demonstration - DO NOT use in production
 const TEST_MNEMONIC =
@@ -47,9 +48,9 @@ async function main() {
   // Create a file
   const content = new TextEncoder().encode('Shared document content');
   const fileInput: FileInput = {
-    file: new File([content], 'shared.txt'),
+    file: new File([content as BlobPart], 'shared.txt'),
     path: '/shared.txt',
-    contentHash: await hashBlake2b(content, 32),
+    contentHash: (await hashBlake2b(content, 32)) as ContentHash,
   };
 
   // Upload with multiple recipients (each with a label)

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
-import { preloadSodium } from '@filemanager/encryptionv2';
+import { preloadSodium } from '@0xd49daa/safecrypt';
 import { generateChunkId, chunkIdToPath } from './chunk-id.ts';
 import {
   dirname,
@@ -79,22 +79,22 @@ describe('Phase 3: Chunk ID Generation & Path Utilities', () => {
   describe('dirname()', () => {
     test('extracts parent directory', () => {
       const path = asFilePath('/foo/bar/baz.txt');
-      expect(dirname(path)).toBe('/foo/bar');
+      expect(dirname(path)).toBe(asFilePath('/foo/bar'));
     });
 
     test('handles file directly under root', () => {
       const path = asFilePath('/file.txt');
-      expect(dirname(path)).toBe('/');
+      expect(dirname(path)).toBe(asFilePath('/'));
     });
 
     test('handles root path', () => {
       const path = asFilePath('/');
-      expect(dirname(path)).toBe('/');
+      expect(dirname(path)).toBe(asFilePath('/'));
     });
 
     test('handles deeply nested path', () => {
       const path = asFilePath('/a/b/c/d/e/file.txt');
-      expect(dirname(path)).toBe('/a/b/c/d/e');
+      expect(dirname(path)).toBe(asFilePath('/a/b/c/d/e'));
     });
   });
 
@@ -173,17 +173,17 @@ describe('Phase 3: Chunk ID Generation & Path Utilities', () => {
   describe('normalizePath()', () => {
     test('validates and returns FilePath', () => {
       const path = normalizePath('/foo/bar');
-      expect(path).toBe('/foo/bar');
+      expect(path).toBe(asFilePath('/foo/bar'));
     });
 
     test('removes trailing slashes', () => {
       const path = normalizePath('/foo/bar/');
-      expect(path).toBe('/foo/bar');
+      expect(path).toBe(asFilePath('/foo/bar'));
     });
 
     test('preserves root path', () => {
       const path = normalizePath('/');
-      expect(path).toBe('/');
+      expect(path).toBe(asFilePath('/'));
     });
 
     test('throws on invalid path', () => {

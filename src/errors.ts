@@ -1,4 +1,4 @@
-import type { ContentHash } from '@filemanager/encryptionv2';
+import type { ContentHash } from '@0xd49daa/safecrypt';
 
 /**
  * Base error class for all ipfs-storage errors.
@@ -189,4 +189,4 @@ export class AbortUploadError extends IpfsStorageError {
 }
 
 // Re-export encryption errors for convenience
-export { EncryptionError, ErrorCode } from '@filemanager/encryptionv2';
+export { EncryptionError, ErrorCode } from '@0xd49daa/safecrypt';

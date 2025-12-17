@@ -1,5 +1,5 @@
 /**
- * @filemanager/ipfs-storage
+ * @0xd49daa/ipfs-storage
  *
  * IPFS-based encrypted batch storage module.
  * Provides upload, manifest retrieval, and download functionality.
@@ -103,4 +103,4 @@ export type {
   X25519PublicKey,
   X25519PrivateKey,
   X25519KeyPair,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';

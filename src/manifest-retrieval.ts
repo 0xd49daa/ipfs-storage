@@ -11,7 +11,7 @@ import {
   type SymmetricKey,
   type X25519PublicKey,
   type Nonce,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 
 import { MANIFEST_DOMAIN, NONCE_SIZE } from './constants.ts';
 import { ManifestError, ValidationError } from './errors.ts';

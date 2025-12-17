@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Browser-first TypeScript library for IPFS-based encrypted batch storage. Stateless module — client stores manifests locally.
 
-**Package:** `@filemanager/ipfs-storage`
+**Package:** `@0xd49daa/ipfs-storage`
 **Runtime:** Browser (primary), Bun (secondary)
 **Serialization:** Protocol Buffers
-**Crypto:** `@filemanager/encryptionv2`
+**Crypto:** `@0xd49daa/safecrypt`
 
 ## Development Commands
 
@@ -72,7 +72,7 @@ fileKey = hashBlake2b(concat(
 
 ## Cryptography Mapping
 
-All crypto via `@filemanager/encryptionv2`:
+All crypto via `@0xd49daa/safecrypt`:
 
 | Operation | Function |
 |-----------|----------|
@@ -88,7 +88,7 @@ All crypto via `@filemanager/encryptionv2`:
 
 | Package | Purpose |
 |---------|---------|
-| `@filemanager/encryptionv2` | All cryptographic operations |
+| `@0xd49daa/safecrypt` | All cryptographic operations |
 | `@ipld/car` | CAR file generation |
 | `@ipld/unixfs` | UnixFS directory building |
 | `multiformats` | CID handling |

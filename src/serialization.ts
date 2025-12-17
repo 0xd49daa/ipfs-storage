@@ -1,6 +1,6 @@
 import { create, toBinary, fromBinary } from '@bufbuild/protobuf';
-import { asContentHash, SIZES } from '@filemanager/encryptionv2';
-import type { X25519PublicKey, ContentHash } from '@filemanager/encryptionv2';
+import { asContentHash, SIZES } from '@0xd49daa/safecrypt';
+import type { X25519PublicKey, ContentHash } from '@0xd49daa/safecrypt';
 import { ValidationError } from './errors.ts';
 
 import {

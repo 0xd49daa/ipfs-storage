@@ -7,7 +7,7 @@ import { CID } from 'multiformats/cid';
 import { CarBufferReader } from '@ipld/car';
 import * as dagPb from '@ipld/dag-pb';
 import * as raw from 'multiformats/codecs/raw';
-import { preloadSodium } from '@filemanager/encryptionv2';
+import { preloadSodium } from '@0xd49daa/safecrypt';
 import { MockIpfsClient, ValidationError } from './index.ts';
 import {
   buildBatchDirectory,
@@ -114,7 +114,10 @@ function parseCarBytes(carBytes: Uint8Array): {
 }
 
 /** Byte-wise compare for locale-independent sorting */
-function byteCompare(a: string, b: string): number {
+function byteCompare(a: string | undefined, b: string | undefined): number {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return -1;
+  if (b === undefined) return 1;
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
@@ -700,7 +703,7 @@ describe('Phase 8: CAR File Generation', () => {
       }
 
       const subData = await collectBytes(client.cat(result.rootCid, '/m_0'));
-      expect(subData).toEqual(subManifests[0]);
+      expect(subData).toEqual(subManifests[0]!);
     });
 
     test('15 chunks batch: all paths resolve correctly', async () => {
@@ -813,7 +816,7 @@ describe('Phase 8: CAR File Generation', () => {
       // Verify all sub-manifests
       for (let i = 0; i < subManifests.length; i++) {
         const data = await collectBytes(client.cat(result.rootCid, `/m_${i}`));
-        expect(data).toEqual(subManifests[i]);
+        expect(data).toEqual(subManifests[i]!);
       }
     });
   });

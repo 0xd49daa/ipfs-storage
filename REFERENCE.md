@@ -1,6 +1,6 @@
 # API Reference
 
-Complete API documentation for `@filemanager/ipfs-storage`.
+Complete API documentation for `@0xd49daa/ipfs-storage`.
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ function createIpfsStorageModule(config: IpfsStorageConfig): IpfsStorageModule
 **Example:**
 
 ```typescript
-import { createIpfsStorageModule, MockIpfsClient } from '@filemanager/ipfs-storage';
+import { createIpfsStorageModule, MockIpfsClient } from '@0xd49daa/ipfs-storage';
 
 const module = createIpfsStorageModule({
   ipfsClient: new MockIpfsClient(),
@@ -51,8 +51,6 @@ Configuration for creating a module instance.
 ```typescript
 interface IpfsStorageConfig {
   ipfsClient: IpfsClient;     // Required: IPFS client for upload/download
-  chunkSize?: number;         // Optional: Chunk size in bytes (default: 10MB)
-  streamingThreshold?: number; // Optional: Streaming encryption threshold (default: 10MB)
 }
 ```
 
@@ -325,7 +323,7 @@ downloadFile(file: FileDownloadRef, options?: DownloadOptions): AsyncIterable<Ui
 
 ### downloadFiles(files, options?)
 
-Download and decrypt multiple files in parallel.
+Download and decrypt multiple files sequentially (one at a time to bound memory usage).
 
 ```typescript
 downloadFiles(files: FileDownloadRef[], options?: DownloadFilesOptions): AsyncIterable<DownloadedFile>
@@ -380,7 +378,7 @@ Options for multi-file download.
 
 ```typescript
 interface DownloadFilesOptions {
-  concurrency?: number;       // Parallel file downloads (default: 3)
+  concurrency?: number;       // DEPRECATED: ignored (downloads are sequential)
   chunkConcurrency?: number;  // Parallel chunk fetch per file (default: 3)
   retries?: number;           // Retry attempts per chunk (default: 3)
   signal?: AbortSignal;       // Cancellation signal
@@ -590,7 +588,7 @@ type DownloadErrorCallback = (error: Error, file: FileDownloadRef) => void;
 
 ## Re-exported Types
 
-The following types are re-exported from `@filemanager/encryptionv2` for convenience:
+The following types are re-exported from `@0xd49daa/safecrypt` for convenience:
 
 ```typescript
 export type {
@@ -599,7 +597,7 @@ export type {
   X25519PublicKey,   // 32-byte X25519 public key
   X25519PrivateKey,  // 32-byte X25519 private key
   X25519KeyPair,     // Public/private key pair
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 ```
 
 ---

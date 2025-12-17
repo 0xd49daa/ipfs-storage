@@ -7,13 +7,13 @@
  * - Manifest offsets refer to ciphertext positions within chunk
  */
 
-import type { SymmetricKey, ContentHash, Nonce } from '@filemanager/encryptionv2';
+import type { SymmetricKey, ContentHash, Nonce } from '@0xd49daa/safecrypt';
 import {
   encrypt,
   decrypt,
   createEncryptStream,
   createDecryptStream,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 import type { ChunkId } from './branded.ts';
 import type { PlannedChunk, FileSegment, ChunkPlan } from './chunk-plan.ts';
 import type { FileInput } from './types.ts';
@@ -292,7 +292,7 @@ export async function decryptStreaming(
   const header = encryptedData.subarray(0, STREAM_HEADER_SIZE);
   const stream = await createDecryptStream(
     key,
-    header as unknown as import('@filemanager/encryptionv2').SecretstreamHeader
+    header as unknown as import('@0xd49daa/safecrypt').SecretstreamHeader
   );
 
   try {

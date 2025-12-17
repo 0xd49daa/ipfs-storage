@@ -9,11 +9,10 @@ import {
   deriveSeed,
   hashBlake2b,
   type ContentHash,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 import { createIpfsStorageModule } from './module.ts';
 import { MockIpfsClient } from './ipfs-client.ts';
 import { ValidationError } from './errors.ts';
-import { CHUNK_SIZE, STREAMING_THRESHOLD } from './constants.ts';
 import type { FileInput, IpfsStorageConfig } from './types.ts';
 
 // ============================================================================
@@ -92,12 +91,10 @@ describe('createIpfsStorageModule - validation', () => {
     expect(typeof module.downloadFiles).toBe('function');
   });
 
-  test('creates module with full config', () => {
+  test('creates module with config', () => {
     const ipfsClient = new MockIpfsClient();
     const module = createIpfsStorageModule({
       ipfsClient,
-      chunkSize: 5 * 1024 * 1024,
-      streamingThreshold: 5 * 1024 * 1024,
     });
 
     expect(module).toBeDefined();
@@ -123,73 +120,6 @@ describe('createIpfsStorageModule - validation', () => {
     }).toThrow('Config must be an object');
   });
 
-  test('throws ValidationError when chunkSize is zero', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, chunkSize: 0 });
-    }).toThrow(ValidationError);
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, chunkSize: 0 });
-    }).toThrow('chunkSize must be a positive number');
-  });
-
-  test('throws ValidationError when chunkSize is negative', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, chunkSize: -1 });
-    }).toThrow(ValidationError);
-  });
-
-  test('throws ValidationError when chunkSize is NaN', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, chunkSize: NaN });
-    }).toThrow(ValidationError);
-  });
-
-  test('throws ValidationError when streamingThreshold is zero', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, streamingThreshold: 0 });
-    }).toThrow(ValidationError);
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, streamingThreshold: 0 });
-    }).toThrow('streamingThreshold must be a positive number');
-  });
-
-  test('throws ValidationError when streamingThreshold is Infinity', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    expect(() => {
-      createIpfsStorageModule({ ipfsClient, streamingThreshold: Infinity });
-    }).toThrow(ValidationError);
-  });
-
-  test('accepts valid chunkSize and streamingThreshold values', () => {
-    const ipfsClient = new MockIpfsClient();
-
-    // Should not throw
-    const module1 = createIpfsStorageModule({ ipfsClient, chunkSize: 1 });
-    expect(module1).toBeDefined();
-
-    const module2 = createIpfsStorageModule({
-      ipfsClient,
-      chunkSize: 100 * 1024 * 1024,
-    });
-    expect(module2).toBeDefined();
-
-    const module3 = createIpfsStorageModule({
-      ipfsClient,
-      streamingThreshold: 1,
-    });
-    expect(module3).toBeDefined();
-  });
 });
 
 // ============================================================================
@@ -215,16 +145,12 @@ describe('createIpfsStorageModule - method binding', () => {
     const ipfsClient = new MockIpfsClient();
     const config: IpfsStorageConfig = {
       ipfsClient,
-      chunkSize: CHUNK_SIZE,
-      streamingThreshold: STREAMING_THRESHOLD,
     };
 
     const configCopy = { ...config };
     createIpfsStorageModule(config);
 
     expect(config.ipfsClient).toBe(configCopy.ipfsClient);
-    expect(config.chunkSize).toBe(configCopy.chunkSize);
-    expect(config.streamingThreshold).toBe(configCopy.streamingThreshold);
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "name": "@filemanager/ipfs-storage",
+  "name": "@0xd49daa/ipfs-storage",
   "version": "0.1.0",
   "description": "Browser-first TypeScript library for IPFS-based encrypted batch storage",
   "type": "module",
@@ -17,8 +17,8 @@
     "proto:generate": "buf generate"
   },
   "dependencies": {
+    "@0xd49daa/safecrypt": "npm:@jsr/0xd49daa__safecrypt",
     "@bufbuild/protobuf": "^2.2.3",
-    "@filemanager/encryptionv2": "workspace:*",
     "@ipld/car": "^5.3.3",
     "@ipld/dag-pb": "^4.1.5",
     "@ipld/unixfs": "^3.0.0",

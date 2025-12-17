@@ -1,5 +1,5 @@
 import { base58 } from '@scure/base';
-import { randomBytes } from '@filemanager/encryptionv2';
+import { randomBytes } from '@0xd49daa/safecrypt';
 import { type ChunkId, unsafe } from './branded.ts';
 
 /** Expected length of a ChunkId (base58-encoded 16 bytes) */

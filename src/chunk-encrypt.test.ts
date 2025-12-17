@@ -4,8 +4,8 @@ import {
   generateKey,
   decrypt,
   createDecryptStream,
-} from '@filemanager/encryptionv2';
-import type { ContentHash, SymmetricKey, Nonce } from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
+import type { ContentHash, SymmetricKey, Nonce } from '@0xd49daa/safecrypt';
 import {
   encryptChunk,
   encryptChunks,
@@ -47,7 +47,7 @@ function mockFile(
   path: string,
   contentHash?: ContentHash
 ): FileInput {
-  const file = new File([content], path.split('/').pop()!, {
+  const file = new File([content as BlobPart], path.split('/').pop()!, {
     type: 'application/octet-stream',
   });
   return {

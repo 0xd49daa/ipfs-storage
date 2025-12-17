@@ -23,7 +23,8 @@ import {
   deriveSeed,
   deriveEncryptionKeyPair,
   hashBlake2b,
-} from '@filemanager/encryptionv2';
+  type ContentHash,
+} from '@0xd49daa/safecrypt';
 
 // Test mnemonic for demonstration - DO NOT use in production
 const TEST_MNEMONIC =
@@ -53,9 +54,9 @@ async function main() {
     const content = new Uint8Array(size);
     for (let i = 0; i < size; i++) content[i] = i % 256;
     files.push({
-      file: new File([content], name),
+      file: new File([content as BlobPart], name),
       path: `/${name}`,
-      contentHash: await hashBlake2b(content, 32),
+      contentHash: (await hashBlake2b(content, 32)) as ContentHash,
     });
   }
 

@@ -21,7 +21,8 @@ import {
   deriveSeed,
   deriveEncryptionKeyPair,
   hashBlake2b,
-} from '@filemanager/encryptionv2';
+  type ContentHash,
+} from '@0xd49daa/safecrypt';
 
 // Test mnemonic for demonstration - DO NOT use in production
 const TEST_MNEMONIC =
@@ -45,16 +46,16 @@ async function main() {
   }
 
   const fileInput: FileInput = {
-    file: new File([content], 'large-file.bin'),
+    file: new File([content as BlobPart], 'large-file.bin'),
     path: '/large-file.bin',
-    contentHash: await hashBlake2b(content, 32),
+    contentHash: (await hashBlake2b(content, 32)) as ContentHash,
   };
 
   let savedState: string | null = null;
 
   // First attempt - will fail after first segment
   console.log('First upload attempt (will fail)...');
-  ipfsClient.setFailNextUpload(new Error('Simulated network error'));
+  ipfsClient.setFailNextUpload(true);
 
   try {
     await storage.uploadBatch([fileInput], {
@@ -65,7 +66,7 @@ async function main() {
         console.log(`  Segment ${result.index + 1}/${result.totalSegments} complete`);
         // Fail after first segment
         if (result.index === 0) {
-          ipfsClient.setFailNextUpload(new Error('Simulated network error'));
+          ipfsClient.setFailNextUpload(true);
         }
       },
     });
@@ -112,8 +113,8 @@ async function main() {
     recipientKeyPair,
     expectedSenderPublicKey: senderKeyPair.publicKey,
   });
-  console.log('  File size:', manifest.files[0].size, 'bytes');
-  console.log('  Chunks:', manifest.files[0].chunks.length);
+  console.log('  File size:', manifest.files[0]!.size, 'bytes');
+  console.log('  Chunks:', manifest.files[0]!.chunks.length);
 
   console.log('\nDone!');
 }

@@ -13,7 +13,7 @@ import {
   hashBlake2b,
   type ContentHash,
   type X25519KeyPair,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 import {
   createIpfsStorageModule,
   MockIpfsClient,
@@ -67,7 +67,7 @@ async function createBinaryFileInput(
   path: string
 ): Promise<FileInput> {
   return {
-    file: new File([data], path.split('/').pop() ?? 'file'),
+    file: new File([data as BlobPart], path.split('/').pop() ?? 'file'),
     path,
     contentHash: (await hashBlake2b(data, 32)) as ContentHash,
   };

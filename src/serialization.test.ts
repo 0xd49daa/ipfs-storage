@@ -20,8 +20,8 @@ import {
   hashBlake2b,
   asContentHash,
   randomBytes,
-} from '@filemanager/encryptionv2';
-import type { X25519PublicKey, ContentHash } from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
+import type { X25519PublicKey, ContentHash } from '@0xd49daa/safecrypt';
 
 // Helper to create a mock X25519PublicKey (32 bytes)
 async function mockX25519PublicKey(): Promise<X25519PublicKey> {
@@ -62,13 +62,13 @@ describe('Phase 1: Serialization', () => {
 
       expect(decoded.encryptedManifest).toEqual(original.encryptedManifest);
       expect(decoded.recipients.length).toBe(1);
-      expect(decoded.recipients[0].recipientPublicKey).toEqual(recipientPubKey);
-      expect(decoded.recipients[0].nonce).toEqual(original.recipients[0].nonce);
-      expect(decoded.recipients[0].ciphertext).toEqual(
-        original.recipients[0].ciphertext
+      expect(decoded.recipients[0]!.recipientPublicKey).toEqual(recipientPubKey);
+      expect(decoded.recipients[0]!.nonce).toEqual(original.recipients[0]!.nonce);
+      expect(decoded.recipients[0]!.ciphertext).toEqual(
+        original.recipients[0]!.ciphertext
       );
-      expect(decoded.recipients[0].senderPublicKey).toEqual(senderPubKey);
-      expect(decoded.recipients[0].label).toBe('MacBook Pro');
+      expect(decoded.recipients[0]!.senderPublicKey).toEqual(senderPubKey);
+      expect(decoded.recipients[0]!.label).toBe('MacBook Pro');
     });
 
     test('round-trip with multiple recipients', async () => {
@@ -95,7 +95,7 @@ describe('Phase 1: Serialization', () => {
 
       expect(decoded.recipients.length).toBe(5);
       for (let i = 0; i < 5; i++) {
-        expect(decoded.recipients[i].label).toBe(`Device ${i}`);
+        expect(decoded.recipients[i]!.label).toBe(`Device ${i}`);
       }
     });
 
@@ -116,7 +116,7 @@ describe('Phase 1: Serialization', () => {
       const encoded = encodeManifestEnvelope(original);
       const decoded = decodeManifestEnvelope(encoded);
 
-      expect(decoded.recipients[0].label).toBeUndefined();
+      expect(decoded.recipients[0]!.label).toBeUndefined();
     });
   });
 
@@ -156,17 +156,17 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.directories.length).toBe(2);
-      expect(decoded.directories[0].path).toBe('/photos');
-      expect(decoded.directories[1].path).toBe('/photos/2024');
+      expect(decoded.directories[0]!.path).toBe('/photos');
+      expect(decoded.directories[1]!.path).toBe('/photos/2024');
 
       expect(decoded.files.length).toBe(1);
-      expect(decoded.files[0].path).toBe('/photos/2024/img.jpg');
-      expect(decoded.files[0].size).toBe(1024 * 1024);
-      expect(decoded.files[0].contentHash).toEqual(contentHash);
-      expect(decoded.files[0].chunks[0]!.encryptedLength).toBe(1024 * 1024 + 40);
-      expect(decoded.files[0].chunks.length).toBe(1);
-      expect(decoded.files[0].chunks[0].chunkId).toBe('6Bv7HnWcL4mT9Rp2QsXx3a');
-      expect(decoded.files[0].chunks[0].encryption).toBe(
+      expect(decoded.files[0]!.path).toBe('/photos/2024/img.jpg');
+      expect(decoded.files[0]!.size).toBe(1024 * 1024);
+      expect(decoded.files[0]!.contentHash).toEqual(contentHash);
+      expect(decoded.files[0]!.chunks[0]!.encryptedLength).toBe(1024 * 1024 + 40);
+      expect(decoded.files[0]!.chunks.length).toBe(1);
+      expect(decoded.files[0]!.chunks[0]!.chunkId).toBe('6Bv7HnWcL4mT9Rp2QsXx3a');
+      expect(decoded.files[0]!.chunks[0]!.encryption).toBe(
         ChunkEncryption.SINGLE_SHOT
       );
 
@@ -198,9 +198,9 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.subManifests.length).toBe(2);
-      expect(decoded.subManifests[0].manifestId).toBe('m_0');
-      expect(decoded.subManifests[0].fileCount).toBe(500);
-      expect(decoded.subManifests[1].manifestId).toBe('m_1');
+      expect(decoded.subManifests[0]!.manifestId).toBe('m_0');
+      expect(decoded.subManifests[0]!.fileCount).toBe(500);
+      expect(decoded.subManifests[1]!.manifestId).toBe('m_1');
     });
 
     test('handles empty arrays', async () => {
@@ -266,7 +266,7 @@ describe('Phase 1: Serialization', () => {
       const encoded = encodeRootManifest(original);
       const decoded = decodeRootManifest(encoded);
 
-      expect(decoded.files[0].chunks.length).toBe(3);
+      expect(decoded.files[0]!.chunks.length).toBe(3);
     });
 
     test('handles STREAMING encryption enum', async () => {
@@ -300,7 +300,7 @@ describe('Phase 1: Serialization', () => {
       const encoded = encodeRootManifest(original);
       const decoded = decodeRootManifest(encoded);
 
-      expect(decoded.files[0].chunks[0].encryption).toBe(
+      expect(decoded.files[0]!.chunks[0]!.encryption).toBe(
         ChunkEncryption.STREAMING
       );
     });
@@ -321,7 +321,7 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.created).toBe(futureTimestamp);
-      expect(decoded.directories[0].created).toBe(futureTimestamp);
+      expect(decoded.directories[0]!.created).toBe(futureTimestamp);
     });
   });
 
@@ -356,8 +356,8 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeSubManifest(encoded);
 
       expect(decoded.files.length).toBe(100);
-      expect(decoded.files[50].path).toBe('/dir/file_050.txt');
-      expect(decoded.files[50].size).toBe(1050);
+      expect(decoded.files[50]!.path).toBe('/dir/file_050.txt');
+      expect(decoded.files[50]!.size).toBe(1050);
     });
   });
 
@@ -386,8 +386,8 @@ describe('Phase 1: Serialization', () => {
       const encoded = encodeRootManifest(original);
       const decoded = decodeRootManifest(encoded);
 
-      expect(decoded.files[0].size).toBe(0);
-      expect(decoded.files[0].chunks).toEqual([]);
+      expect(decoded.files[0]!.size).toBe(0);
+      expect(decoded.files[0]!.chunks).toEqual([]);
     });
   });
 

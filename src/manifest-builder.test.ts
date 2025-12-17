@@ -24,8 +24,8 @@ import {
   hashBlake2b,
   randomBytes,
   unwrapKeyAuthenticated,
-} from '@filemanager/encryptionv2';
-import type { ContentHash, Nonce, SymmetricKey } from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
+import type { ContentHash, Nonce, SymmetricKey } from '@0xd49daa/safecrypt';
 
 const TEST_MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';

@@ -22,7 +22,8 @@ import {
   deriveSeed,
   deriveEncryptionKeyPair,
   hashBlake2b,
-} from '@filemanager/encryptionv2';
+  type ContentHash,
+} from '@0xd49daa/safecrypt';
 
 // Test mnemonic for demonstration - DO NOT use in production
 const TEST_MNEMONIC =
@@ -45,9 +46,9 @@ async function main() {
   for (const name of ['readme.txt', 'data.json', 'config.yaml']) {
     const content = new TextEncoder().encode(`Content of ${name}`);
     files.push({
-      file: new File([content], name),
+      file: new File([content as BlobPart], name),
       path: `/${name}`,
-      contentHash: await hashBlake2b(content, 32),
+      contentHash: (await hashBlake2b(content, 32)) as ContentHash,
     });
   }
 

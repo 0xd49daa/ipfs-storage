@@ -5,7 +5,7 @@
  * from Phases 0-9 to upload encrypted files to IPFS.
  */
 
-import { generateKey, randomBytes, type SymmetricKey } from '@filemanager/encryptionv2';
+import { generateKey, randomBytes, type SymmetricKey } from '@0xd49daa/safecrypt';
 import { base58, base64 } from '@scure/base';
 import { CID } from 'multiformats/cid';
 import { CarBufferWriter } from '@ipld/car';
@@ -463,7 +463,8 @@ export async function uploadBatch(
     signal,
   })) {
     encryptedChunks.push(chunk);
-    bytesProcessed += chunk.encryptedSize;
+    // Use plaintext size (dataSize) to match totalBytes which is also plaintext
+    bytesProcessed += chunk.dataSize;
 
     checkAbortWithState(signal);
 

@@ -1,0 +1,21 @@
+{
+  "name": "@0xd49daa/ipfs-storage",
+  "version": "0.1.0",
+  "description": "Browser-first TypeScript library for IPFS-based encrypted batch storage",
+  "license": "MIT",
+  "exports": "./src/index.ts",
+  "imports": {
+    "@0xd49daa/safecrypt": "jsr:@0xd49daa/safecrypt@^0.1.4"
+  },
+  "publish": {
+    "include": [
+      "README.md",
+      "REFERENCE.md",
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "src/**/*.test.ts",
+      "src/examples/**"
+    ]
+  }
+}

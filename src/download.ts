@@ -5,8 +5,8 @@
  * streaming integrity verification, and retry logic.
  */
 
-import type { SymmetricKey } from '@filemanager/encryptionv2';
-import { hashBlake2b, constantTimeEqual } from '@filemanager/encryptionv2';
+import type { SymmetricKey } from '@0xd49daa/safecrypt';
+import { hashBlake2b, constantTimeEqual, createBlake2bHasher } from '@0xd49daa/safecrypt';
 import type { IpfsClient } from './ipfs-client.ts';
 import type {
   FileDownloadRef,
@@ -241,8 +241,8 @@ export async function* downloadFile(
   // Derive file encryption key
   const fileKey = await deriveFileKey(ref.manifestKey, ref.contentHash);
 
-  // Buffer for collecting all plaintext for integrity verification
-  const plaintextChunks: Uint8Array[] = [];
+  // Create streaming hasher for incremental integrity verification
+  const hasher = await createBlake2bHasher();
 
   // Progress tracking
   let bytesYielded = 0;
@@ -303,8 +303,8 @@ export async function* downloadFile(
         const data = buffer.get(nextToYield)!;
         buffer.delete(nextToYield);
 
-        // Collect for integrity verification
-        plaintextChunks.push(data);
+        // Update streaming hasher for integrity verification
+        hasher.update(data);
 
         // Yield the plaintext
         yield data;
@@ -347,17 +347,8 @@ export async function* downloadFile(
   // Integrity Verification
   // ========================================================================
 
-  // Concatenate all plaintext chunks
-  const totalLength = plaintextChunks.reduce((sum, c) => sum + c.length, 0);
-  const fullPlaintext = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of plaintextChunks) {
-    fullPlaintext.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // Hash and verify
-  const actualHash = await hashBlake2b(fullPlaintext, 32);
+  // Finalize streaming hash and verify
+  const actualHash = await hasher.digest();
   const hashMatches = await constantTimeEqual(actualHash, ref.contentHash);
 
   if (!hashMatches) {

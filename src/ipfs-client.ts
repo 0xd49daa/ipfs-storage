@@ -8,17 +8,58 @@ import { sha256 } from 'multiformats/hashes/sha2';
 import * as raw from 'multiformats/codecs/raw';
 import * as dagPb from '@ipld/dag-pb';
 import { CarBufferReader } from '@ipld/car';
-import {
-  decode as decodeUnixFS,
-  NodeType,
-  type SimpleFile,
-  type AdvancedFile,
-  type ComplexFile,
-  type Raw,
-  type Node as UnixFSNode,
-  type FileLink,
-} from '@ipld/unixfs';
+import { decode as decodeUnixFS, NodeType } from '@ipld/unixfs';
 import { IpfsStorageError } from './errors.ts';
+
+// Local type definitions for UnixFS nodes (not exported from @ipld/unixfs)
+// These match the shapes returned by decode()
+
+interface UnixFSMetadata {
+  readonly mode?: number;
+  readonly mtime?: { readonly secs: number; readonly nsecs?: number };
+}
+
+interface SimpleFile {
+  readonly type: typeof NodeType.File;
+  readonly layout: 'simple';
+  readonly content: Uint8Array;
+  readonly metadata?: UnixFSMetadata;
+}
+
+interface AdvancedFile {
+  readonly type: typeof NodeType.File;
+  readonly layout: 'advanced';
+  readonly parts: ReadonlyArray<FileLink>;
+  readonly metadata?: UnixFSMetadata;
+}
+
+interface ComplexFile {
+  readonly type: typeof NodeType.File;
+  readonly layout: 'complex';
+  readonly content: Uint8Array;
+  readonly parts: ReadonlyArray<FileLink>;
+  readonly metadata?: UnixFSMetadata;
+}
+
+interface Raw {
+  readonly type: typeof NodeType.Raw;
+  readonly content: Uint8Array;
+}
+
+interface FileLink {
+  readonly cid: CID;
+  readonly contentByteLength: number;
+  readonly dagByteLength: number;
+}
+
+type UnixFSNode =
+  | SimpleFile
+  | AdvancedFile
+  | ComplexFile
+  | Raw
+  | { readonly type: typeof NodeType.Directory }
+  | { readonly type: typeof NodeType.HAMTShard }
+  | { readonly type: typeof NodeType.Symlink; readonly content: Uint8Array };
 
 // ============================================================================
 // Interfaces
@@ -458,7 +499,8 @@ export class MockIpfsClient implements IpfsClient {
       // Try to decode as UnixFS, with fallback for library bugs
       let node: UnixFSNode;
       try {
-        node = decodeUnixFS(bytes);
+        // Cast through unknown since @ipld/unixfs types are not exported
+        node = decodeUnixFS(bytes) as unknown as UnixFSNode;
       } catch {
         // Fallback: if decode fails (e.g., AdvancedFile with no inline data),
         // check if this is a file node with links (chunked file)

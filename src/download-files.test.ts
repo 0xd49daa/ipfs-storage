@@ -9,8 +9,8 @@ import {
   deriveSeed,
   generateKey,
   preloadSodium,
-} from '@filemanager/encryptionv2';
-import type { ContentHash, X25519KeyPair } from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
+import type { ContentHash, X25519KeyPair } from '@0xd49daa/safecrypt';
 import { MockIpfsClient } from './ipfs-client.ts';
 import { uploadBatch } from './upload.ts';
 import { getManifest } from './manifest-retrieval.ts';
@@ -57,7 +57,7 @@ async function createTestFile(
     typeof content === 'string' ? new TextEncoder().encode(content) : content;
   const contentHash = (await hashBlake2b(data, 32)) as ContentHash;
   return {
-    file: new File([data], path.split('/').pop() ?? 'file'),
+    file: new File([data as BlobPart], path.split('/').pop() ?? 'file'),
     path,
     contentHash,
   };

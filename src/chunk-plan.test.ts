@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
-import { preloadSodium } from '@filemanager/encryptionv2';
-import type { ContentHash } from '@filemanager/encryptionv2';
+import { preloadSodium } from '@0xd49daa/safecrypt';
+import type { ContentHash } from '@0xd49daa/safecrypt';
 import { planChunks } from './chunk-plan.ts';
 import type { FileInput } from './types.ts';
 import { ChunkEncryption } from './gen/manifest_pb.ts';

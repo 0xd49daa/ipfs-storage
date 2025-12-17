@@ -3,7 +3,7 @@ import type {
   ContentHash,
   X25519PublicKey,
   X25519KeyPair,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 
 // Re-export types from errors.ts for upload state tracking
 export type {
@@ -402,7 +402,10 @@ export interface DownloadProgress {
  * Options for multi-file download.
  */
 export interface DownloadFilesOptions {
-  /** Parallel file downloads (default: 3) */
+  /**
+   * @deprecated Ignored. Downloads are sequential to bound memory usage.
+   * Chunk-level parallelism (chunkConcurrency) is still supported.
+   */
   concurrency?: number;
   /** Parallel chunk fetch per file (default: 3) */
   chunkConcurrency?: number;
@@ -478,10 +481,6 @@ export type DownloadErrorCallback = (
 export interface IpfsStorageConfig {
   /** IPFS client for upload/download operations */
   ipfsClient: import('./ipfs-client.ts').IpfsClient;
-  /** Chunk size in bytes (default: 10MB) */
-  chunkSize?: number;
-  /** Threshold for streaming encryption (default: 10MB) */
-  streamingThreshold?: number;
 }
 
 /**

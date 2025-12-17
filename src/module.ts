@@ -10,7 +10,6 @@ import { uploadBatch as uploadBatchImpl } from './upload.ts';
 import { getManifest as getManifestImpl } from './manifest-retrieval.ts';
 import { downloadFile as downloadFileImpl } from './download.ts';
 import { downloadFiles as downloadFilesImpl } from './download-files.ts';
-import { CHUNK_SIZE, STREAMING_THRESHOLD } from './constants.ts';
 import type { IpfsClient } from './ipfs-client.ts';
 import type {
   IpfsStorageConfig,
@@ -38,26 +37,6 @@ function validateConfig(config: IpfsStorageConfig): void {
   if (!config.ipfsClient) {
     throw new ValidationError('ipfsClient is required');
   }
-
-  if (config.chunkSize !== undefined) {
-    if (
-      typeof config.chunkSize !== 'number' ||
-      !Number.isFinite(config.chunkSize) ||
-      config.chunkSize <= 0
-    ) {
-      throw new ValidationError('chunkSize must be a positive number');
-    }
-  }
-
-  if (config.streamingThreshold !== undefined) {
-    if (
-      typeof config.streamingThreshold !== 'number' ||
-      !Number.isFinite(config.streamingThreshold) ||
-      config.streamingThreshold <= 0
-    ) {
-      throw new ValidationError('streamingThreshold must be a positive number');
-    }
-  }
 }
 
 /**
@@ -69,7 +48,7 @@ function validateConfig(config: IpfsStorageConfig): void {
  *
  * @example
  * ```typescript
- * import { createIpfsStorageModule, MockIpfsClient } from '@filemanager/ipfs-storage'
+ * import { createIpfsStorageModule, MockIpfsClient } from '@0xd49daa/ipfs-storage'
  *
  * const module = createIpfsStorageModule({
  *   ipfsClient: new MockIpfsClient(),
@@ -87,13 +66,6 @@ export function createIpfsStorageModule(
   validateConfig(config);
 
   const ipfsClient: IpfsClient = config.ipfsClient;
-  // Store defaults for future use (chunkSize/streamingThreshold not yet wired through)
-  const _chunkSize = config.chunkSize ?? CHUNK_SIZE;
-  const _streamingThreshold = config.streamingThreshold ?? STREAMING_THRESHOLD;
-
-  // Suppress unused variable warnings - these will be used when chunk size becomes configurable
-  void _chunkSize;
-  void _streamingThreshold;
 
   return {
     uploadBatch(

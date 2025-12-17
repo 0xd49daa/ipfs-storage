@@ -20,7 +20,8 @@ import {
   deriveSeed,
   deriveEncryptionKeyPair,
   hashBlake2b,
-} from '@filemanager/encryptionv2';
+  type ContentHash,
+} from '@0xd49daa/safecrypt';
 
 // Test mnemonic for demonstration - DO NOT use in production
 const TEST_MNEMONIC =
@@ -41,11 +42,11 @@ async function main() {
 
   // Create file content
   const content = new TextEncoder().encode('Hello, IPFS!');
-  const contentHash = await hashBlake2b(content, 32);
+  const contentHash = (await hashBlake2b(content, 32)) as ContentHash;
 
   // Create FileInput
   const fileInput: FileInput = {
-    file: new File([content], 'hello.txt', { type: 'text/plain' }),
+    file: new File([content as BlobPart], 'hello.txt', { type: 'text/plain' }),
     path: '/hello.txt',
     contentHash,
   };

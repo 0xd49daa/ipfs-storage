@@ -10,7 +10,7 @@ import {
   wrapKeyAuthenticatedMulti,
   type SymmetricKey,
   type X25519KeyPair,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 
 import { SUB_MANIFEST_SIZE, MANIFEST_DOMAIN } from './constants.ts';
 import { ValidationError } from './errors.ts';

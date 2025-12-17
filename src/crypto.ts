@@ -1,5 +1,5 @@
-import type { SymmetricKey, ContentHash } from '@filemanager/encryptionv2';
-import { hashBlake2b } from '@filemanager/encryptionv2';
+import type { SymmetricKey, ContentHash } from '@0xd49daa/safecrypt';
+import { hashBlake2b } from '@0xd49daa/safecrypt';
 import { DOMAIN } from './constants.ts';
 
 /** Pre-computed UTF-8 encoded domain prefix */

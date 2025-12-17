@@ -1,20 +1,65 @@
-# @filemanager/ipfs-storage
+# @0xd49daa/ipfs-storage
 
-Browser-first TypeScript library for IPFS-based encrypted batch storage with end-to-end encryption, multi-recipient support, and resumable uploads.
+Browser-first TypeScript library for IPFS-based encrypted batch storage with self-custody keys, multi-recipient support, and resumable uploads.
+
+## Motivation
+
+### The Problem
+
+Building privacy-preserving decentralized storage is hard. You need:
+
+- **True self-custody** — Users own their keys, not a service provider
+- **Multi-device access** — Share encrypted files across devices without re-encrypting
+- **Paid storage integration** — Work with incentivized networks like Crust that pin data
+- **Privacy from infrastructure** — Payment relays shouldn't see file contents or structure
+- **Offline recovery** — Recover everything from a single seed phrase
+
+### Why Not WNFS?
+
+[WNFS](https://github.com/wnfs-wg/rs-wnfs) (WebNative File System) is a mature encrypted filesystem for IPFS, but it solves a different problem:
+
+| Aspect | WNFS | This Package |
+|--------|------|--------------|
+| **Key management** | UCAN tokens, app-controlled | BIP-39 mnemonic, user-controlled |
+| **Mutability** | Mutable filesystem with history | Immutable batches (Crust-compatible) |
+| **Sharing model** | Capability-based delegation | Multi-recipient key wrapping |
+| **Infrastructure** | Designed for Fission/custom gateways | Designed for blind payment relays |
+| **Recovery** | Requires backup of root CID | Mnemonic recovers everything |
+| **Batch semantics** | Continuous writes | Atomic uploads (all-or-nothing) |
+
+WNFS is excellent for apps that manage user data on their behalf. This package is for systems where:
+- Users must control their own keys (self-custody requirement)
+- A relay pays for storage without seeing content (zero-knowledge payment)
+- Data lives on incentivized networks with immutable CID semantics (Crust, Filecoin)
+- Recovery must work from mnemonic alone across all devices
+
+### Why Not Raw IPFS + Encryption?
+
+You could encrypt files and upload them yourself, but you'd need to solve:
+- **Key derivation** — How to derive file keys deterministically for recovery
+- **Manifest format** — How to store file metadata (Protocol Buffers vs JSON bloat)
+- **Multi-recipient** — Authenticated key wrapping with sender verification
+- **Chunking strategy** — Aggregation for small files, splitting for large files
+- **Resume support** — Per-segment state for unreliable connections
+- **Privacy** — PADME padding, randomized chunk IDs, no size leakage
+
+This package provides these primitives as a tested, minimal library.
 
 ## Features
 
+- **Self-custody keys** — BIP-39 derived keys, user holds mnemonic
 - **End-to-end encryption** — Files encrypted before upload using libsodium
-- **Multi-recipient support** — Share batches with multiple devices/users
-- **Resumable uploads** — Resume failed uploads without re-encrypting
+- **Multi-recipient support** — Share batches with multiple devices/users via authenticated key wrapping
+- **Resumable uploads** — Resume failed uploads without re-encrypting (per-segment state)
 - **Streaming encryption** — Memory-efficient handling of large files
 - **Protocol Buffers** — Compact, versioned manifest format
 - **Abort support** — Cancel operations gracefully with AbortSignal
+- **PADME padding** — Hides file sizes (≤12% overhead)
 
 ## Installation
 
 ```bash
-bun add @filemanager/ipfs-storage
+bun add @0xd49daa/ipfs-storage
 ```
 
 ## Quick Start
@@ -24,13 +69,13 @@ import {
   createIpfsStorageModule,
   MockIpfsClient,
   type FileInput,
-} from '@filemanager/ipfs-storage';
+} from '@0xd49daa/ipfs-storage';
 import {
   preloadSodium,
   deriveSeed,
   deriveEncryptionKeyPair,
   hashBlake2b,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 
 // Initialize libsodium
 await preloadSodium();
@@ -89,7 +134,7 @@ for await (const chunk of storage.downloadFile(fileRef)) {
 | `module.uploadBatch(files, options)` | Upload encrypted file batch |
 | `module.getManifest(cid, options)` | Retrieve and decrypt manifest |
 | `module.downloadFile(ref, options?)` | Download single file (async iterable) |
-| `module.downloadFiles(refs, options?)` | Download multiple files in parallel |
+| `module.downloadFiles(refs, options?)` | Download multiple files sequentially |
 
 See [REFERENCE.md](./REFERENCE.md) for complete API documentation.
 
@@ -139,7 +184,7 @@ bun run typecheck     # Type check
 The package exports `MockIpfsClient` for testing:
 
 ```typescript
-import { MockIpfsClient } from '@filemanager/ipfs-storage';
+import { MockIpfsClient } from '@0xd49daa/ipfs-storage';
 
 const client = new MockIpfsClient();
 // Use in tests - stores CAR files in memory, resolves paths
@@ -157,9 +202,31 @@ Files → Chunk Aggregation → Encryption → CAR Segments → IPFS Upload
                               Encrypted Manifest with Recipient Keys
 ```
 
+**Batch structure on IPFS:**
+```
+batch_root/
+  ├── 6B/v7/6Bv7HnWcL4mT9Rp2QsXx3a   ← encrypted chunk (randomized path)
+  ├── 9c/Ld/9cLdPx8Yk2RmNp3QwT5f1b   ← encrypted chunk
+  ├── m                               ← root manifest (encrypted)
+  └── m_0, m_1...                     ← sub-manifests (if >255 files)
+```
+
+**Key design decisions:**
+
+| Decision | Rationale |
+|----------|-----------|
+| **Immutable batches** | CID never changes — compatible with Crust storage orders |
+| **10MB chunks** | Balance between aggregation efficiency and streaming |
+| **Randomized chunk paths** | No file structure leakage; `{id[0:2]}/{id[2:4]}/{id}` scales to petabytes |
+| **PADME padding** | Hides actual file sizes with ≤12% overhead |
+| **Segmented CAR upload** | Resume at segment boundary without re-encrypting |
+| **Authenticated key wrap** | Recipients verify sender — prevents malicious manifest injection |
+| **Deterministic file keys** | `fileKey = hash(manifestKey ‖ contentHash)` — no per-file key storage |
+
+**Chunking strategy:**
 - Files < 10MB are aggregated into shared chunks
 - Files ≥ 10MB are split into dedicated 10MB chunks
-- PADME padding applied to final chunk (≤12% overhead)
+- PADME padding applied to final chunk
 - Manifest encrypted with symmetric key, wrapped for each recipient
 - CAR segments uploaded sequentially for resumability
 

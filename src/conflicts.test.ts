@@ -2,7 +2,7 @@ import { describe, test, expect } from 'bun:test';
 import { resolveConflicts } from './conflicts.ts';
 import { ValidationError } from './errors.ts';
 import type { FileInput } from './types.ts';
-import type { ContentHash } from '@filemanager/encryptionv2';
+import type { ContentHash } from '@0xd49daa/safecrypt';
 
 // Helper to create mock FileInput with only path (other fields unused by resolveConflicts)
 function mockFileInput(path: string): FileInput {

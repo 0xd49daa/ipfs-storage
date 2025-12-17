@@ -16,7 +16,7 @@ import {
   hashBlake2b,
   preloadSodium,
   asContentHash,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 
 describe('Phase 0: Foundation', () => {
   describe('constants', () => {

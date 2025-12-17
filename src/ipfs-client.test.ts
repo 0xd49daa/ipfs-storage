@@ -8,7 +8,14 @@ import * as dagPb from '@ipld/dag-pb';
 import * as raw from 'multiformats/codecs/raw';
 import { CID } from 'multiformats/cid';
 import { sha256 } from 'multiformats/hashes/sha2';
-import { encode as encodeUnixFS, NodeType, type FileLink } from '@ipld/unixfs';
+import { encode as encodeUnixFS, NodeType } from '@ipld/unixfs';
+
+// Local type for FileLink (not exported from @ipld/unixfs)
+interface FileLink {
+  cid: CID;
+  dagByteLength: number;
+  contentByteLength: number;
+}
 import {
   MockIpfsClient,
   IpfsUploadError,

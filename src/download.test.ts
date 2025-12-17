@@ -10,7 +10,7 @@ import {
   hashBlake2b,
   type SymmetricKey,
   type ContentHash,
-} from '@filemanager/encryptionv2';
+} from '@0xd49daa/safecrypt';
 import {
   MockIpfsClient,
   ValidationError,
@@ -41,7 +41,7 @@ function createFile(content: string, name = 'test.txt'): File {
 
 /** Create a File object from Uint8Array */
 function createBinaryFile(data: Uint8Array, name = 'test.bin'): File {
-  return new File([data], name, { type: 'application/octet-stream' });
+  return new File([data as BlobPart], name, { type: 'application/octet-stream' });
 }
 
 /** Compute content hash for a string */
