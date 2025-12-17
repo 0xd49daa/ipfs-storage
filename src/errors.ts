@@ -71,52 +71,21 @@ export class ChunkUnavailableError extends IpfsStorageError {
 }
 
 /**
- * Segment state for resumable uploads.
+ * Chunk upload error after retries exhausted.
  */
-export interface SegmentStateForError {
-  index: number;
-  status: 'pending' | 'uploading' | 'complete' | 'failed';
-  chunkCids: Record<string, string>; // chunkId → CID
-  error?: string;
-}
+export class ChunkUploadError extends IpfsStorageError {
+  readonly chunkCid: string;
 
-/**
- * Upload state for resumable uploads.
- * Defined here to avoid circular dependency with types.ts.
- *
- * This interface is JSON-serializable - callers can persist it with
- * JSON.stringify() and restore it with JSON.parse() for resume.
- */
-export interface UploadStateForError {
-  batchId: string;
-  segments: SegmentStateForError[];
-  /** CID of the encrypted manifest (required for resume validation) */
-  manifestCid: string;
-  /** Root CID of the batch (required for resume validation) */
-  rootCid: string;
-  /** Base64-encoded 32-byte manifest key (required for resume) */
-  manifestKeyBase64: string;
-  /** Batch creation timestamp (Unix ms). Used on resume to preserve original timestamp. */
-  created?: number;
-}
-
-/**
- * Segment upload failure with resume state.
- */
-export class SegmentUploadError extends IpfsStorageError {
-  readonly segmentIndex: number;
-  readonly state: UploadStateForError;
-
-  constructor(segmentIndex: number, state: UploadStateForError, cause?: Error) {
-    super(`Segment ${segmentIndex} upload failed`);
-    this.name = 'SegmentUploadError';
-    this.segmentIndex = segmentIndex;
-    this.state = state;
+  constructor(chunkCid: string, cause?: Error) {
+    super(`Chunk upload failed after retries: ${chunkCid}`);
+    this.name = 'ChunkUploadError';
+    this.chunkCid = chunkCid;
     if (cause) {
       this.cause = cause;
     }
   }
 }
+
 
 /**
  * CID verification failure.
@@ -131,60 +100,6 @@ export class CidMismatchError extends IpfsStorageError {
     this.name = 'CidMismatchError';
     this.expected = expected;
     this.actual = actual;
-  }
-}
-
-/**
- * Resume validation failure.
- * Thrown when resumeState doesn't match the current upload attempt.
- *
- * Currently only thrown when segment count mismatches (files added/removed).
- *
- * Note: CID validation was removed because encryption uses random nonces,
- * making CIDs non-deterministic across sessions.
- */
-export class ResumeValidationError extends IpfsStorageError {
-  readonly field: string;
-  readonly expected: string;
-  readonly actual: string;
-
-  constructor(field: string, expected: string, actual: string) {
-    super(
-      `Resume validation failed: ${field} mismatch (expected ${expected}, got ${actual})`
-    );
-    this.name = 'ResumeValidationError';
-    this.field = field;
-    this.expected = expected;
-    this.actual = actual;
-  }
-}
-
-/**
- * Upload aborted by user via AbortSignal.
- * Contains UploadState for resume capability.
- *
- * The error name is 'AbortError' for Web API compatibility.
- * If the abort signal included a custom reason, it is preserved
- * in the `reason` property and (if an Error) as `cause`.
- */
-export class AbortUploadError extends IpfsStorageError {
-  readonly state: UploadStateForError;
-  readonly reason: unknown;
-
-  constructor(state: UploadStateForError, reason?: unknown) {
-    const message =
-      reason instanceof Error
-        ? reason.message
-        : typeof reason === 'string'
-          ? reason
-          : 'Upload aborted';
-    super(message);
-    this.name = 'AbortError';
-    this.state = state;
-    this.reason = reason;
-    if (reason instanceof Error) {
-      this.cause = reason;
-    }
   }
 }
 

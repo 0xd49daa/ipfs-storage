@@ -2,7 +2,7 @@
 
 [![JSR](https://jsr.io/badges/@0xd49daa/ipfs-storage)](https://jsr.io/@0xd49daa/ipfs-storage)
 
-Browser-first TypeScript library for IPFS-based encrypted batch storage with self-custody keys, multi-recipient support, and resumable uploads.
+Browser-first TypeScript library for IPFS-based encrypted batch storage with self-custody keys and multi-recipient support.
 
 ## Motivation
 
@@ -42,7 +42,6 @@ You could encrypt files and upload them yourself, but you'd need to solve:
 - **Manifest format** — How to store file metadata (Protocol Buffers vs JSON bloat)
 - **Multi-recipient** — Authenticated key wrapping with sender verification
 - **Chunking strategy** — Aggregation for small files, splitting for large files
-- **Resume support** — Per-segment state for unreliable connections
 - **Privacy** — PADME padding, randomized chunk IDs, no size leakage
 
 This package provides these primitives as a tested, minimal library.
@@ -52,8 +51,7 @@ This package provides these primitives as a tested, minimal library.
 - **Self-custody keys** — BIP-39 derived keys, user holds mnemonic
 - **End-to-end encryption** — Files encrypted before upload using libsodium
 - **Multi-recipient support** — Share batches with multiple devices/users via authenticated key wrapping
-- **Resumable uploads** — Resume failed uploads without re-encrypting (per-segment state)
-- **Streaming encryption** — Memory-efficient handling of large files
+- **Streaming encryption** — Memory-efficient handling of large files (~12MB peak memory)
 - **Protocol Buffers** — Compact, versioned manifest format
 - **Abort support** — Cancel operations gracefully with AbortSignal
 - **PADME padding** — Hides file sizes (≤12% overhead)
@@ -147,24 +145,6 @@ for await (const chunk of storage.downloadFile(fileRef)) {
 
 See [REFERENCE.md](./REFERENCE.md) for complete API documentation.
 
-## Examples
-
-Runnable examples in `src/examples/`:
-
-| Example | Description |
-|---------|-------------|
-| [basic-upload.ts](./src/examples/basic-upload.ts) | Simple upload workflow |
-| [download-files.ts](./src/examples/download-files.ts) | Upload → manifest → download |
-| [multi-recipient.ts](./src/examples/multi-recipient.ts) | Multiple recipients with labels |
-| [resume-upload.ts](./src/examples/resume-upload.ts) | Error handling and resume |
-| [progress-tracking.ts](./src/examples/progress-tracking.ts) | Progress callbacks |
-
-Run examples with:
-
-```bash
-bun run src/examples/basic-upload.ts
-```
-
 ## Error Handling
 
 | Error Class | When Thrown |
@@ -173,9 +153,6 @@ bun run src/examples/basic-upload.ts
 | `IntegrityError` | Content hash mismatch on download |
 | `ManifestError` | Cannot parse/decrypt manifest, sender mismatch |
 | `ChunkUnavailableError` | Chunk fetch failed after retries |
-| `SegmentUploadError` | Segment upload failed (includes resume state) |
-| `AbortUploadError` | Upload aborted via signal (includes resume state) |
-| `ResumeValidationError` | Invalid resume state structure |
 | `CidMismatchError` | CID verification failed |
 
 All errors extend `IpfsStorageError`. See [REFERENCE.md](./REFERENCE.md) for details.
@@ -228,7 +205,7 @@ batch_root/
 | **10MB chunks** | Balance between aggregation efficiency and streaming |
 | **Randomized chunk paths** | No file structure leakage; `{id[0:2]}/{id[2:4]}/{id}` scales to petabytes |
 | **PADME padding** | Hides actual file sizes with ≤12% overhead |
-| **Segmented CAR upload** | Resume at segment boundary without re-encrypting |
+| **Streaming upload** | Each chunk uploaded immediately; ~12MB peak memory |
 | **Authenticated key wrap** | Recipients verify sender — prevents malicious manifest injection |
 | **Deterministic file keys** | `fileKey = hash(manifestKey ‖ contentHash)` — no per-file key storage |
 
@@ -237,7 +214,7 @@ batch_root/
 - Files ≥ 10MB are split into dedicated 10MB chunks
 - PADME padding applied to final chunk
 - Manifest encrypted with symmetric key, wrapped for each recipient
-- CAR segments uploaded sequentially for resumability
+- Chunks uploaded as single-block CARs for immediate upload
 
 ## License
 

@@ -5,7 +5,6 @@ import {
   IntegrityError,
   ManifestError,
   ChunkUnavailableError,
-  SegmentUploadError,
   CidMismatchError,
 } from './index.ts';
 import { DOMAIN, CHUNK_SIZE } from './constants.ts';
@@ -107,19 +106,6 @@ describe('Phase 0: Foundation', () => {
       const err = new ChunkUnavailableError('bafytest', 'chunk123');
       expect(err.batchCid).toBe('bafytest');
       expect(err.chunkId).toBe('chunk123');
-    });
-
-    test('SegmentUploadError contains segmentIndex and state', () => {
-      const state = {
-        batchId: 'batch1',
-        segments: [],
-        manifestCid: 'bafyreimani',
-        rootCid: 'bafybeiroot',
-        manifestKeyBase64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-      };
-      const err = new SegmentUploadError(2, state);
-      expect(err.segmentIndex).toBe(2);
-      expect(err.state).toBe(state);
     });
 
     test('CidMismatchError contains expected and actual', () => {

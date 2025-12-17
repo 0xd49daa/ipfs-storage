@@ -12,11 +12,12 @@ import {
 } from '@0xd49daa/safecrypt';
 import type { ContentHash, X25519KeyPair } from '@0xd49daa/safecrypt';
 import { MockIpfsClient } from './ipfs-client.ts';
-import { uploadBatch } from './upload.ts';
+import { uploadBatch } from './streaming-upload.ts';
 import { getManifest } from './manifest-retrieval.ts';
 import { downloadFiles } from './download-files.ts';
+import { asAsyncIterable } from './async-iterable.ts';
 import type {
-  FileInput,
+  StreamingFileInput,
   FileDownloadRef,
   MultiDownloadProgress,
 } from './types.ts';
@@ -52,14 +53,20 @@ beforeAll(async () => {
 async function createTestFile(
   path: string,
   content: string | Uint8Array
-): Promise<FileInput> {
+): Promise<StreamingFileInput> {
   const data =
     typeof content === 'string' ? new TextEncoder().encode(content) : content;
   const contentHash = (await hashBlake2b(data, 32)) as ContentHash;
   return {
-    file: new File([data as BlobPart], path.split('/').pop() ?? 'file'),
     path,
     contentHash,
+    size: data.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(data);
+        controller.close();
+      }
+    }),
   };
 }
 
@@ -170,7 +177,7 @@ describe('downloadFiles', () => {
       const file = await createTestFile('/test.txt', originalContent);
 
       const result = await uploadBatch(
-        [file],
+        asAsyncIterable([file]),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -215,7 +222,7 @@ describe('downloadFiles', () => {
       ];
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -264,7 +271,7 @@ describe('downloadFiles', () => {
       ];
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -324,7 +331,7 @@ describe('downloadFiles', () => {
       ]);
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -373,7 +380,7 @@ describe('downloadFiles', () => {
       ]);
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -418,7 +425,7 @@ describe('downloadFiles', () => {
       ]);
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -520,7 +527,7 @@ describe('downloadFiles', () => {
       ]);
 
       const result = await uploadBatch(
-        goodFiles,
+        asAsyncIterable(goodFiles),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -626,7 +633,7 @@ describe('downloadFiles', () => {
       ]);
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -716,7 +723,7 @@ describe('downloadFiles', () => {
       const file = await createTestFile('/test.txt', 'content');
 
       const result = await uploadBatch(
-        [file],
+        asAsyncIterable([file]),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -758,7 +765,7 @@ describe('downloadFiles', () => {
       const file = await createTestFile('/test.txt', 'Hello, World!');
 
       const result = await uploadBatch(
-        [file],
+        asAsyncIterable([file]),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -812,7 +819,7 @@ describe('downloadFiles', () => {
       ];
 
       const result = await uploadBatch(
-        files,
+        asAsyncIterable(files),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -871,6 +878,14 @@ describe('downloadFiles', () => {
   describe('round-trip integration', () => {
     test('upload → getManifest → downloadFiles returns original content', async () => {
       const client = new MockIpfsClient();
+
+      // Store original content for verification
+      const originalContents: Record<string, Uint8Array> = {
+        '/doc.txt': new TextEncoder().encode('Document content here'),
+        '/image.bin': new Uint8Array([1, 2, 3, 4, 5]),
+        '/nested/path/file.txt': new TextEncoder().encode('Nested file content'),
+      };
+
       const originalFiles = [
         await createTestFile('/doc.txt', 'Document content here'),
         await createTestFile('/image.bin', new Uint8Array([1, 2, 3, 4, 5])),
@@ -881,7 +896,7 @@ describe('downloadFiles', () => {
       ];
 
       const result = await uploadBatch(
-        originalFiles,
+        asAsyncIterable(originalFiles),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -912,15 +927,11 @@ describe('downloadFiles', () => {
 
       // Verify each file
       for (const downloaded of downloadedFiles) {
-        const original = originalFiles.find((f) => f.path === downloaded.path)!;
-        expect(original).toBeDefined();
+        const originalContent = originalContents[downloaded.path];
+        expect(originalContent).toBeDefined();
 
         const downloadedContent = await collectBytes(downloaded.content);
-        const originalContent = new Uint8Array(
-          await original.file.arrayBuffer()
-        );
-
-        expect(downloadedContent).toEqual(originalContent);
+        expect(downloadedContent).toEqual(originalContent!);
       }
     });
 
@@ -935,7 +946,7 @@ describe('downloadFiles', () => {
       const file = await createTestFile('/large.bin', largeContent);
 
       const result = await uploadBatch(
-        [file],
+        asAsyncIterable([file]),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -982,7 +993,7 @@ describe('downloadFiles', () => {
       const file = await createTestFile('/test.txt', 'content');
 
       const result = await uploadBatch(
-        [file],
+        asAsyncIterable([file]),
         {
           senderKeyPair,
           recipients: [{ publicKey: recipientKeyPair.publicKey }],

@@ -16,9 +16,9 @@ export interface BuildDirectoryTreeOptions {
  * "/a/b/c/file.txt" → ["/a", "/a/b", "/a/b/c"]
  * Excludes root "/".
  */
-function getAncestors(path: FilePath): FilePath[] {
+function getAncestors(path: FilePath | string): FilePath[] {
   const ancestors: FilePath[] = [];
-  let current = dirname(path);
+  let current = dirname(path as FilePath);
 
   while (current !== '/') {
     ancestors.push(current);
@@ -27,6 +27,125 @@ function getAncestors(path: FilePath): FilePath[] {
 
   // Return in order from root to leaf (reverse)
   return ancestors.reverse();
+}
+
+/**
+ * Incremental directory tree builder.
+ * Adds directories one file at a time.
+ *
+ * Use this for streaming scenarios where you want to process files
+ * one at a time without collecting all paths upfront.
+ */
+export class DirectoryTreeBuilder {
+  private dirMap = new Map<string, { created: number; isExplicit: boolean }>();
+  private defaultCreated: number;
+
+  /**
+   * Create a new DirectoryTreeBuilder.
+   *
+   * @param defaultCreated Default timestamp for inferred directories
+   * @param explicitDirs Optional explicit directory declarations to pre-populate
+   * @throws ValidationError if any explicit directory is invalid
+   */
+  constructor(defaultCreated: number, explicitDirs?: DirectoryInput[]) {
+    this.defaultCreated = defaultCreated;
+
+    // Pre-populate with explicit directories
+    if (explicitDirs) {
+      for (const dir of explicitDirs) {
+        // Validate path
+        if (!dir.path || dir.path.length === 0) {
+          throw new ValidationError('Directory path cannot be empty');
+        }
+        if (!isValidPath(dir.path)) {
+          throw new ValidationError(
+            `Invalid directory path: must start with "/" and not contain "//", got "${dir.path}"`
+          );
+        }
+
+        // Normalize (remove trailing slashes)
+        const normalized = normalizePath(dir.path);
+
+        // Reject root "/" explicitly
+        if (normalized === '/') {
+          throw new ValidationError(
+            'Root directory "/" cannot be declared explicitly'
+          );
+        }
+
+        // Add the explicit directory
+        const existing = this.dirMap.get(normalized);
+        const created = dir.created ?? existing?.created ?? defaultCreated;
+
+        this.dirMap.set(normalized, {
+          created,
+          isExplicit: true,
+        });
+
+        // Also add ancestors (inferred) if not present
+        const ancestors = getAncestors(normalized);
+        for (const ancestor of ancestors) {
+          if (!this.dirMap.has(ancestor)) {
+            this.dirMap.set(ancestor, { created: defaultCreated, isExplicit: false });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Add a file path, inferring its ancestor directories.
+   *
+   * @param resolvedPath The resolved file path (already conflict-resolved)
+   * @throws ValidationError if path is invalid
+   */
+  addFilePath(resolvedPath: string): void {
+    // Validate input path
+    if (!isValidPath(resolvedPath)) {
+      throw new ValidationError(
+        `Invalid file path: must start with "/" and not contain "//", got "${resolvedPath}"`
+      );
+    }
+
+    const filePath = unsafe.asFilePath(resolvedPath);
+    const ancestors = getAncestors(filePath);
+
+    for (const ancestor of ancestors) {
+      if (!this.dirMap.has(ancestor)) {
+        this.dirMap.set(ancestor, { created: this.defaultCreated, isExplicit: false });
+      }
+    }
+  }
+
+  /**
+   * Build the final sorted DirectoryInfo array.
+   *
+   * @returns Sorted array of DirectoryInfo (excludes root "/")
+   */
+  build(): DirectoryInfo[] {
+    const directories: DirectoryInfo[] = [];
+
+    for (const [path, info] of this.dirMap) {
+      const filePath = unsafe.asFilePath(path);
+      directories.push({
+        path,
+        name: basename(filePath),
+        created: info.created,
+      });
+    }
+
+    // Sort by path (lexicographic)
+    directories.sort((a, b) => a.path.localeCompare(b.path));
+
+    return directories;
+  }
+
+  /**
+   * Get the count of directories tracked.
+   */
+  get size(): number {
+    return this.dirMap.size;
+  }
 }
 
 /**

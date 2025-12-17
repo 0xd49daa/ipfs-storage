@@ -34,7 +34,7 @@ export type {
 // =============================================================================
 
 export type {
-  FileInput,
+  StreamingFileInput,
   DirectoryInput,
   RecipientInfo,
   UploadOptions,
@@ -42,11 +42,23 @@ export type {
   RenamedFile,
   UploadProgress,
   UploadProgressCallback,
-  UploadState,
-  SegmentState,
-  SegmentResult,
-  SegmentCompleteCallback,
+  ChunkUploadedCallback,
+  ChunkUploadedInfo,
+  SubManifestFlushedCallback,
+  SubManifestFlushedInfo,
 } from './types.ts';
+
+// =============================================================================
+// Standalone Upload Function
+// =============================================================================
+
+export { uploadBatch } from './streaming-upload.ts';
+
+// =============================================================================
+// Utility for Array to AsyncIterable Conversion
+// =============================================================================
+
+export { asAsyncIterable } from './async-iterable.ts';
 
 // =============================================================================
 // Manifest Types
@@ -87,10 +99,8 @@ export {
   IntegrityError,
   ManifestError,
   ChunkUnavailableError,
-  SegmentUploadError,
+  ChunkUploadError,
   CidMismatchError,
-  ResumeValidationError,
-  AbortUploadError,
 } from './errors.ts';
 
 // =============================================================================

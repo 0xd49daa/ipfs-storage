@@ -16,15 +16,16 @@ import {
   ValidationError,
   IntegrityError,
   ChunkUnavailableError,
-  type FileInput,
+  type StreamingFileInput,
   type FileDownloadRef,
   type DownloadOptions,
   type DownloadProgress,
   type BatchManifest,
 } from './index.ts';
 import { downloadFile } from './download.ts';
-import { uploadBatch } from './upload.ts';
+import { uploadBatch } from './streaming-upload.ts';
 import { getManifest } from './manifest-retrieval.ts';
+import { asAsyncIterable } from './async-iterable.ts';
 
 // ============================================================================
 // Test Helpers
@@ -33,16 +34,6 @@ import { getManifest } from './manifest-retrieval.ts';
 beforeAll(async () => {
   await preloadSodium();
 });
-
-/** Create a File object from string content */
-function createFile(content: string, name = 'test.txt'): File {
-  return new File([content], name, { type: 'text/plain' });
-}
-
-/** Create a File object from Uint8Array */
-function createBinaryFile(data: Uint8Array, name = 'test.bin'): File {
-  return new File([data as BlobPart], name, { type: 'application/octet-stream' });
-}
 
 /** Compute content hash for a string */
 async function hashString(content: string): Promise<ContentHash> {
@@ -55,29 +46,40 @@ async function hashBytes(data: Uint8Array): Promise<ContentHash> {
   return (await hashBlake2b(data, 32)) as ContentHash;
 }
 
-/** Create FileInput from string content */
+/** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
-  path: string,
-  name?: string
-): Promise<FileInput> {
+  path: string
+): Promise<StreamingFileInput> {
+  const bytes = new TextEncoder().encode(content);
   return {
-    file: createFile(content, name ?? path.split('/').pop()),
     path,
     contentHash: await hashString(content),
+    size: bytes.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
   };
 }
 
-/** Create FileInput from Uint8Array */
+/** Create StreamingFileInput from Uint8Array */
 async function createBinaryFileInput(
   data: Uint8Array,
-  path: string,
-  name?: string
-): Promise<FileInput> {
+  path: string
+): Promise<StreamingFileInput> {
   return {
-    file: createBinaryFile(data, name ?? path.split('/').pop()),
     path,
     contentHash: await hashBytes(data),
+    size: data.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(data);
+        controller.close();
+      }
+    }),
   };
 }
 
@@ -125,7 +127,7 @@ async function uploadAndGetRef(
       : await createBinaryFileInput(content, path);
 
   const result = await uploadBatch(
-    [file],
+    asAsyncIterable([file]),
     {
       senderKeyPair: keyPair,
       recipients: [{ publicKey: keyPair.publicKey }],
@@ -630,7 +632,7 @@ describe('downloadFile - round-trip integration', () => {
     // Upload
     const file = await createFileInput(content, '/integration.txt');
     const uploadResult = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -672,7 +674,7 @@ describe('downloadFile - round-trip integration', () => {
     ];
 
     const uploadResult = await uploadBatch(
-      files,
+      asAsyncIterable(files),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -714,7 +716,7 @@ describe('downloadFile - round-trip integration', () => {
     ];
 
     const uploadResult = await uploadBatch(
-      files,
+      asAsyncIterable(files),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],

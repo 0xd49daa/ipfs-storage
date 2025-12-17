@@ -6,7 +6,7 @@
  */
 
 import { ValidationError } from './errors.ts';
-import { uploadBatch as uploadBatchImpl } from './upload.ts';
+import { uploadBatch as uploadBatchImpl } from './streaming-upload.ts';
 import { getManifest as getManifestImpl } from './manifest-retrieval.ts';
 import { downloadFile as downloadFileImpl } from './download.ts';
 import { downloadFiles as downloadFilesImpl } from './download-files.ts';
@@ -15,7 +15,7 @@ import type {
   IpfsStorageConfig,
   IpfsStorageModule,
   ReadOptions,
-  FileInput,
+  StreamingFileInput,
   UploadOptions,
   BatchResult,
   FileDownloadRef,
@@ -69,7 +69,7 @@ export function createIpfsStorageModule(
 
   return {
     uploadBatch(
-      files: FileInput[],
+      files: AsyncIterable<StreamingFileInput>,
       options: UploadOptions
     ): Promise<BatchResult> {
       return uploadBatchImpl(files, options, ipfsClient);

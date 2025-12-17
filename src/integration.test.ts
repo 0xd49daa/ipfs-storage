@@ -18,15 +18,12 @@ import {
   createIpfsStorageModule,
   MockIpfsClient,
   ManifestError,
-  SegmentUploadError,
-  AbortUploadError,
-  ResumeValidationError,
-  type FileInput,
+  asAsyncIterable,
+  type StreamingFileInput,
   type DirectoryInput,
   type FileDownloadRef,
   type BatchManifest,
   type IpfsStorageModule,
-  type UploadState,
 } from './index.ts';
 
 // ============================================================================
@@ -43,33 +40,40 @@ async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
   return deriveEncryptionKeyPair(seed, index);
 }
 
-/** Create a File object from string content */
-function createFile(content: string, name = 'test.txt'): File {
-  return new File([content], name, { type: 'text/plain' });
-}
-
-/** Create FileInput from string content */
+/** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
   path: string
-): Promise<FileInput> {
+): Promise<StreamingFileInput> {
   const bytes = new TextEncoder().encode(content);
   return {
-    file: createFile(content, path.split('/').pop()),
     path,
     contentHash: (await hashBlake2b(bytes, 32)) as ContentHash,
+    size: bytes.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
   };
 }
 
-/** Create FileInput from Uint8Array */
+/** Create StreamingFileInput from Uint8Array */
 async function createBinaryFileInput(
   data: Uint8Array,
   path: string
-): Promise<FileInput> {
+): Promise<StreamingFileInput> {
   return {
-    file: new File([data as BlobPart], path.split('/').pop() ?? 'file'),
     path,
     contentHash: (await hashBlake2b(data, 32)) as ContentHash,
+    size: data.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(data);
+        controller.close();
+      }
+    }),
   };
 }
 
@@ -154,7 +158,7 @@ describe('Integration: Full Round-Trip', () => {
     const content = 'Hello, Integration Test!';
     const file = await createFileInput(content, '/hello.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -187,7 +191,7 @@ describe('Integration: Full Round-Trip', () => {
       await createFileInput('Content E', '/e.txt'),
     ];
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -220,7 +224,7 @@ describe('Integration: Full Round-Trip', () => {
     const data = generatePatternedBytes(size);
     const file = await createBinaryFileInput(data, '/large.bin');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -251,7 +255,7 @@ describe('Integration: Full Round-Trip', () => {
       await createFileInput('Another small file', '/another.txt'),
     ];
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -288,7 +292,7 @@ describe('Integration: Full Round-Trip', () => {
       { path: '/another-empty' },
     ];
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       directories,
@@ -318,7 +322,7 @@ describe('Integration: Full Round-Trip', () => {
       await createFileInput('content3', '/fun/party.txt'),
     ];
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -346,7 +350,7 @@ describe('Integration: Full Round-Trip', () => {
     const content = 'Deep content';
     const file = await createFileInput(content, deepPath);
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -397,7 +401,7 @@ describe('Integration: Multi-Device Recipients', () => {
     const content = 'Shared content';
     const file = await createFileInput(content, '/shared.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [
         { publicKey: recipient1.publicKey },
@@ -437,7 +441,7 @@ describe('Integration: Multi-Device Recipients', () => {
 
     const file = await createFileInput('content for all', '/all.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: recipients.map((r) => ({ publicKey: r.publicKey })),
     });
@@ -460,7 +464,7 @@ describe('Integration: Multi-Device Recipients', () => {
 
     const file = await createFileInput('content', '/test.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [
         { publicKey: recipient1.publicKey, label: 'MacBook' },
@@ -488,7 +492,7 @@ describe('Integration: Multi-Device Recipients', () => {
 
     const file = await createFileInput('secret', '/secret.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipient.publicKey }],
     });
@@ -517,7 +521,7 @@ describe('Integration: Multi-Device Recipients', () => {
       await createFileInput('File 5 content', '/file5.txt'),
     ];
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: recipients.map((r) => ({ publicKey: r.publicKey })),
     });
@@ -572,14 +576,14 @@ describe('Integration: Manifest Splitting', () => {
     // This tests the manifest building and retrieval workflow at scale
     // Note: The public API doesn't expose maxSubManifestSize, so we verify
     // the workflow works correctly regardless of internal splitting decisions
-    const files: FileInput[] = [];
+    const files: StreamingFileInput[] = [];
     for (let i = 0; i < 500; i++) {
       const paddedIndex = i.toString().padStart(5, '0');
       const longPath = `/directory_with_long_name_${paddedIndex}/subdirectory_also_long/file_${paddedIndex}.txt`;
       files.push(await createFileInput(`Content ${i}`, longPath));
     }
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -606,7 +610,7 @@ describe('Integration: Manifest Splitting', () => {
 
   test('file retrieval across batch returns correct content', async () => {
     // Create files and verify content retrieval works correctly
-    const files: FileInput[] = [];
+    const files: StreamingFileInput[] = [];
     for (let i = 0; i < 100; i++) {
       const paddedIndex = i.toString().padStart(3, '0');
       files.push(
@@ -617,7 +621,7 @@ describe('Integration: Manifest Splitting', () => {
       );
     }
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -670,7 +674,7 @@ describe('Integration: Manifest Splitting', () => {
       );
     }
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -698,7 +702,7 @@ describe('Integration: Manifest Splitting', () => {
 
   test('directories preserved correctly with large file batches', async () => {
     // Create files with many directories and verify directories round-trip correctly
-    const files: FileInput[] = [];
+    const files: StreamingFileInput[] = [];
     const directories: DirectoryInput[] = [];
 
     // Add explicit empty directories
@@ -719,7 +723,7 @@ describe('Integration: Manifest Splitting', () => {
       );
     }
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       directories,
@@ -752,328 +756,7 @@ describe('Integration: Manifest Splitting', () => {
 });
 
 // ============================================================================
-// 4. Resume After Failure (5 tests)
-// ============================================================================
-
-describe('Integration: Upload Resume', () => {
-  let ipfsClient: MockIpfsClient;
-  let module: IpfsStorageModule;
-  let senderKeyPair: X25519KeyPair;
-  let recipientKeyPair: X25519KeyPair;
-
-  beforeAll(async () => {
-    await preloadSodium();
-    senderKeyPair = await createTestKeyPair(0);
-    recipientKeyPair = await createTestKeyPair(1);
-  });
-
-  afterEach(() => {
-    ipfsClient?.clearUploadLatch?.();
-  });
-
-  test('resume from SegmentUploadError: complete upload succeeds', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    const content = 'Resume test content';
-    const file = await createFileInput(content, '/test.txt');
-
-    // First attempt: fail on upload
-    ipfsClient.setFailNextUpload(true);
-    let savedState: UploadState | undefined;
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      });
-    } catch (err) {
-      if (err instanceof SegmentUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    expect(savedState).toBeDefined();
-
-    // Create fresh client and module for resume
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    // Reset segment status for resume
-    savedState!.segments[0]!.status = 'pending';
-
-    const result = await module.uploadBatch([file], {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      resumeState: savedState,
-    });
-
-    // Verify round-trip works
-    const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
-    });
-
-    const ref = buildFileRef(manifest, '/test.txt');
-    const downloaded = await collectBytes(module.downloadFile(ref));
-    expect(new TextDecoder().decode(downloaded)).toBe(content);
-  });
-
-  test('resume from AbortUploadError: state is valid for resume', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    const file = await createFileInput('abort test content', '/abort.txt');
-
-    // Set up abort during upload
-    const controller = new AbortController();
-    let savedState: UploadState | undefined;
-
-    // Abort after upload starts
-    ipfsClient.setUploadLatch(async () => {
-      controller.abort();
-    });
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err instanceof AbortUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    expect(savedState).toBeDefined();
-
-    // Resume with fresh client
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-    savedState!.segments[0]!.status = 'pending';
-
-    const result = await module.uploadBatch([file], {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      resumeState: savedState,
-    });
-
-    expect(result.cid).toBeDefined();
-  });
-
-  test('resume preserves manifestKey: file keys remain consistent', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    const file = await createFileInput('key test', '/key.txt');
-
-    // First attempt
-    ipfsClient.setFailNextUpload(true);
-    let savedState: UploadState | undefined;
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      });
-    } catch (err) {
-      if (err instanceof SegmentUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    const originalManifestKey = savedState!.manifestKeyBase64;
-    expect(originalManifestKey).toBeDefined();
-
-    // Resume
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-    savedState!.segments[0]!.status = 'pending';
-
-    const result = await module.uploadBatch([file], {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      resumeState: savedState,
-    });
-
-    // Get manifest and verify key is consistent
-    const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
-    });
-
-    // manifestKey from resumed upload should be decodable and work
-    const ref = buildFileRef(manifest, '/key.txt');
-    const downloaded = await collectBytes(module.downloadFile(ref));
-    expect(new TextDecoder().decode(downloaded)).toBe('key test');
-
-    // Verify the key was preserved (same base64 encoding works)
-    expect(originalManifestKey).toBeDefined();
-  });
-
-  test('resume state survives JSON serialization', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    const file = await createFileInput('json test', '/json.txt');
-
-    // Get state from error
-    ipfsClient.setFailNextUpload(true);
-    let savedState: UploadState | undefined;
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      });
-    } catch (err) {
-      if (err instanceof SegmentUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    // Serialize and deserialize (simulating storage)
-    const serialized = JSON.stringify(savedState);
-    const deserialized = JSON.parse(serialized) as UploadState;
-
-    // Resume with deserialized state
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-    deserialized.segments[0]!.status = 'pending';
-
-    const result = await module.uploadBatch([file], {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      resumeState: deserialized,
-    });
-
-    expect(result.cid).toBeDefined();
-  });
-
-  test('segment count mismatch throws ResumeValidationError', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    const file = await createFileInput('mismatch test', '/mismatch.txt');
-
-    // Get state
-    ipfsClient.setFailNextUpload(true);
-    let savedState: UploadState | undefined;
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      });
-    } catch (err) {
-      if (err instanceof SegmentUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    // Modify segment count to cause mismatch
-    savedState!.segments.push({
-      index: 1,
-      status: 'pending',
-      chunkCids: {},
-    });
-
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    await expect(
-      module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        resumeState: savedState,
-      })
-    ).rejects.toThrow(ResumeValidationError);
-  });
-
-  test('multi-segment upload resume: state with multiple segments', async () => {
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    // Create a file large enough to create multiple chunks
-    // Each chunk is 10MB, so 25MB file = 3 chunks = 3 segments (with segmentSize=1)
-    const largeData = generatePatternedBytes(25 * 1024 * 1024);
-    const file = await createBinaryFileInput(largeData, '/large.bin');
-
-    // First attempt: fail after first segment uploads
-    let uploadCount = 0;
-    ipfsClient.setUploadLatch(async () => {
-      uploadCount++;
-      if (uploadCount === 2) {
-        // Fail on second segment
-        throw new Error('Simulated network failure');
-      }
-    });
-
-    let savedState: UploadState | undefined;
-
-    try {
-      await module.uploadBatch([file], {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        segmentSize: 1, // 1 chunk per segment to force multiple segments
-      });
-    } catch (err) {
-      if (err instanceof SegmentUploadError) {
-        savedState = err.state;
-      }
-    }
-
-    expect(savedState).toBeDefined();
-    // With 25MB file and segmentSize=1, we should have 3+ segments
-    expect(savedState!.segments.length).toBeGreaterThan(1);
-
-    // Verify at least one segment completed
-    const completedSegments = savedState!.segments.filter(
-      (s) => s.status === 'complete'
-    );
-    expect(completedSegments.length).toBeGreaterThanOrEqual(1);
-
-    // Resume with fresh client
-    ipfsClient = new MockIpfsClient();
-    module = createIpfsStorageModule({ ipfsClient });
-
-    // Reset failed/uploading segments to pending for resume
-    for (const segment of savedState!.segments) {
-      if (segment.status !== 'complete') {
-        segment.status = 'pending';
-      }
-    }
-
-    const result = await module.uploadBatch([file], {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      resumeState: savedState,
-      segmentSize: 1,
-    });
-
-    expect(result.cid).toBeDefined();
-    expect(result.segmentsUploaded).toBeGreaterThan(1);
-
-    // Verify round-trip works after resume
-    const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
-    });
-
-    expect(manifest.files).toHaveLength(1);
-    expect(manifest.files[0]!.size).toBe(25 * 1024 * 1024);
-
-    // Download and verify content matches
-    const ref = buildFileRef(manifest, '/large.bin');
-    const downloaded = await collectBytes(module.downloadFile(ref));
-    expect(downloaded.length).toBe(25 * 1024 * 1024);
-    expect(downloaded).toEqual(largeData);
-  });
-});
-
-// ============================================================================
-// 5. Concurrent Download Stress Test (5 tests)
+// 4. Concurrent Download Stress Test (5 tests)
 // ============================================================================
 
 describe('Integration: Concurrent Downloads', () => {
@@ -1103,7 +786,7 @@ describe('Integration: Concurrent Downloads', () => {
         )
     );
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1232,7 +915,7 @@ describe('Integration: Edge Cases', () => {
   test('single empty file (0 bytes): round-trip succeeds', async () => {
     const file = await createFileInput('', '/empty.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1257,7 +940,7 @@ describe('Integration: Edge Cases', () => {
       createFileInput('', '/dir/empty3.txt'),
     ]);
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1282,7 +965,7 @@ describe('Integration: Edge Cases', () => {
       createFileInput('', '/another-empty.txt'),
     ]);
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1310,7 +993,7 @@ describe('Integration: Edge Cases', () => {
   test('explicit empty directory: preserved in manifest', async () => {
     const file = await createFileInput('content', '/docs/file.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       directories: [{ path: '/empty-album', created: 12345 }],
@@ -1329,7 +1012,7 @@ describe('Integration: Edge Cases', () => {
   test('nested empty directories structure', async () => {
     const file = await createFileInput('content', '/a.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       directories: [
@@ -1353,7 +1036,7 @@ describe('Integration: Edge Cases', () => {
   test('single file batch (trivial case)', async () => {
     const file = await createFileInput('single file', '/only-file.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1378,7 +1061,7 @@ describe('Integration: Edge Cases', () => {
       createFileInput('greek', '/Ω-omega.txt'),
     ]);
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1406,7 +1089,7 @@ describe('Integration: Edge Cases', () => {
     const deepPath = '/l1/l2/l3/l4/l5/l6/l7/l8/l9/l10/file.txt';
     const file = await createFileInput('deep', deepPath);
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1431,7 +1114,7 @@ describe('Integration: Edge Cases', () => {
         )
     );
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1449,7 +1132,7 @@ describe('Integration: Edge Cases', () => {
     const file2 = await createFileInput('second', '/photo.jpg');
     const file3 = await createFileInput('third', '/photo.jpg');
 
-    const result = await module.uploadBatch([file1, file2, file3], {
+    const result = await module.uploadBatch(asAsyncIterable([file1, file2, file3]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1486,7 +1169,7 @@ describe('Integration: Edge Cases', () => {
     const data = generatePatternedBytes(exactChunkSize);
     const file = await createBinaryFileInput(data, '/exact-10mb.bin');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1541,7 +1224,7 @@ describe('Integration: Smoke Tests', () => {
         )
     );
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1571,7 +1254,7 @@ describe('Integration: Smoke Tests', () => {
     const data = generatePatternedBytes(10 * 1024 * 1024);
     const file = await createBinaryFileInput(data, '/large.bin');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -1606,7 +1289,7 @@ describe('Integration: Smoke Tests', () => {
           )
       );
 
-      const result = await module.uploadBatch(files, {
+      const result = await module.uploadBatch(asAsyncIterable(files), {
         senderKeyPair,
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
       });

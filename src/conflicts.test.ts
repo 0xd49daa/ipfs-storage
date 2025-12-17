@@ -1,25 +1,19 @@
 import { describe, test, expect } from 'bun:test';
 import { resolveConflicts } from './conflicts.ts';
 import { ValidationError } from './errors.ts';
-import type { FileInput } from './types.ts';
-import type { ContentHash } from '@0xd49daa/safecrypt';
 
-// Helper to create mock FileInput with only path (other fields unused by resolveConflicts)
-function mockFileInput(path: string): FileInput {
-  return {
-    file: new Blob() as unknown as File,
-    path,
-    contentHash: new Uint8Array(32) as ContentHash,
-  };
+// Helper to create mock path container (only path is used by resolveConflicts)
+function mockPathContainer(path: string): { path: string } {
+  return { path };
 }
 
 describe('Phase 4: Duplicate Path Resolution', () => {
   describe('resolveConflicts()', () => {
     test('returns unchanged paths when no conflicts', () => {
       const files = [
-        mockFileInput('/a.txt'),
-        mockFileInput('/b.txt'),
-        mockFileInput('/c.txt'),
+        mockPathContainer('/a.txt'),
+        mockPathContainer('/b.txt'),
+        mockPathContainer('/c.txt'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/a.txt', '/b.txt', '/c.txt']);
@@ -27,8 +21,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('renames single duplicate with _1 suffix', () => {
       const files = [
-        mockFileInput('/photo.jpg'),
-        mockFileInput('/photo.jpg'),
+        mockPathContainer('/photo.jpg'),
+        mockPathContainer('/photo.jpg'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/photo.jpg', '/photo_1.jpg']);
@@ -36,9 +30,9 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('renames multiple duplicates with incrementing suffixes', () => {
       const files = [
-        mockFileInput('/photo.jpg'),
-        mockFileInput('/photo.jpg'),
-        mockFileInput('/photo.jpg'),
+        mockPathContainer('/photo.jpg'),
+        mockPathContainer('/photo.jpg'),
+        mockPathContainer('/photo.jpg'),
       ];
       const resolved = resolveConflicts(files);
       // Each file gets its own resolved path
@@ -47,9 +41,9 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('counter skips existing _N suffixes', () => {
       const files = [
-        mockFileInput('/photo.jpg'),
-        mockFileInput('/photo_1.jpg'),
-        mockFileInput('/photo.jpg'), // Should become photo_2.jpg, not photo_1.jpg
+        mockPathContainer('/photo.jpg'),
+        mockPathContainer('/photo_1.jpg'),
+        mockPathContainer('/photo.jpg'), // Should become photo_2.jpg, not photo_1.jpg
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/photo.jpg', '/photo_1.jpg', '/photo_2.jpg']);
@@ -57,8 +51,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('handles files without extension', () => {
       const files = [
-        mockFileInput('/README'),
-        mockFileInput('/README'),
+        mockPathContainer('/README'),
+        mockPathContainer('/README'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/README', '/README_1']);
@@ -66,8 +60,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('handles files with multiple dots correctly', () => {
       const files = [
-        mockFileInput('/file.tar.gz'),
-        mockFileInput('/file.tar.gz'),
+        mockPathContainer('/file.tar.gz'),
+        mockPathContainer('/file.tar.gz'),
       ];
       const resolved = resolveConflicts(files);
       // extname returns ".gz", so base is "file.tar"
@@ -76,8 +70,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('handles dotfiles correctly', () => {
       const files = [
-        mockFileInput('/.gitignore'),
-        mockFileInput('/.gitignore'),
+        mockPathContainer('/.gitignore'),
+        mockPathContainer('/.gitignore'),
       ];
       const resolved = resolveConflicts(files);
       // .gitignore has no extension (dot is first char), so base is ".gitignore"
@@ -86,8 +80,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('handles nested paths correctly', () => {
       const files = [
-        mockFileInput('/a/b/c.txt'),
-        mockFileInput('/a/b/c.txt'),
+        mockPathContainer('/a/b/c.txt'),
+        mockPathContainer('/a/b/c.txt'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/a/b/c.txt', '/a/b/c_1.txt']);
@@ -95,8 +89,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('different directories do not conflict', () => {
       const files = [
-        mockFileInput('/a/photo.jpg'),
-        mockFileInput('/b/photo.jpg'),
+        mockPathContainer('/a/photo.jpg'),
+        mockPathContainer('/b/photo.jpg'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/a/photo.jpg', '/b/photo.jpg']);
@@ -104,14 +98,14 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('input order determines result (deterministic)', () => {
       const files1 = [
-        mockFileInput('/a.txt'),
-        mockFileInput('/a.txt'),
-        mockFileInput('/a.txt'),
+        mockPathContainer('/a.txt'),
+        mockPathContainer('/a.txt'),
+        mockPathContainer('/a.txt'),
       ];
       const files2 = [
-        mockFileInput('/a.txt'),
-        mockFileInput('/a.txt'),
-        mockFileInput('/a.txt'),
+        mockPathContainer('/a.txt'),
+        mockPathContainer('/a.txt'),
+        mockPathContainer('/a.txt'),
       ];
       const resolved1 = resolveConflicts(files1);
       const resolved2 = resolveConflicts(files2);
@@ -121,7 +115,7 @@ describe('Phase 4: Duplicate Path Resolution', () => {
     });
 
     test('handles large batch with many duplicates', () => {
-      const files = Array.from({ length: 105 }, () => mockFileInput('/file.txt'));
+      const files = Array.from({ length: 105 }, () => mockPathContainer('/file.txt'));
       const resolved = resolveConflicts(files);
 
       expect(resolved.length).toBe(105);
@@ -136,8 +130,8 @@ describe('Phase 4: Duplicate Path Resolution', () => {
 
     test('root-level duplicates produce valid paths (no //)', () => {
       const files = [
-        mockFileInput('/file.txt'),
-        mockFileInput('/file.txt'),
+        mockPathContainer('/file.txt'),
+        mockPathContainer('/file.txt'),
       ];
       const resolved = resolveConflicts(files);
       expect(resolved).toEqual(['/file.txt', '/file_1.txt']);
@@ -145,21 +139,21 @@ describe('Phase 4: Duplicate Path Resolution', () => {
     });
 
     test('throws ValidationError for path without leading slash', () => {
-      const files = [mockFileInput('invalid/path.txt')];
+      const files = [mockPathContainer('invalid/path.txt')];
       expect(() => resolveConflicts(files)).toThrow(ValidationError);
     });
 
     test('throws ValidationError for path with double slashes', () => {
-      const files = [mockFileInput('/a//b.txt')];
+      const files = [mockPathContainer('/a//b.txt')];
       expect(() => resolveConflicts(files)).toThrow(ValidationError);
     });
 
     test('returns array aligned with input', () => {
       const files = [
-        mockFileInput('/unique.txt'),
-        mockFileInput('/dup.txt'),
-        mockFileInput('/another.txt'),
-        mockFileInput('/dup.txt'),
+        mockPathContainer('/unique.txt'),
+        mockPathContainer('/dup.txt'),
+        mockPathContainer('/another.txt'),
+        mockPathContainer('/dup.txt'),
       ];
       const resolved = resolveConflicts(files);
 

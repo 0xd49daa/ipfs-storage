@@ -13,7 +13,8 @@ import {
 import { createIpfsStorageModule } from './module.ts';
 import { MockIpfsClient } from './ipfs-client.ts';
 import { ValidationError } from './errors.ts';
-import type { FileInput, IpfsStorageConfig } from './types.ts';
+import { asAsyncIterable } from './async-iterable.ts';
+import type { StreamingFileInput, IpfsStorageConfig } from './types.ts';
 
 // ============================================================================
 // Test Helpers
@@ -23,27 +24,28 @@ beforeAll(async () => {
   await preloadSodium();
 });
 
-/** Create a File object from string content */
-function createFile(content: string, name = 'test.txt'): File {
-  return new File([content], name, { type: 'text/plain' });
-}
-
 /** Compute content hash for a string */
 async function hashString(content: string): Promise<ContentHash> {
   const bytes = new TextEncoder().encode(content);
   return (await hashBlake2b(bytes, 32)) as ContentHash;
 }
 
-/** Create FileInput from string content */
+/** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
-  path: string,
-  name?: string
-): Promise<FileInput> {
+  path: string
+): Promise<StreamingFileInput> {
+  const bytes = new TextEncoder().encode(content);
   return {
-    file: createFile(content, name ?? path.split('/').pop()),
     path,
     contentHash: await hashString(content),
+    size: bytes.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
   };
 }
 
@@ -170,7 +172,7 @@ describe('createIpfsStorageModule - round-trip', () => {
     const content = 'Hello, IPFS Storage Module!';
     const file = await createFileInput(content, '/hello.txt');
 
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -219,7 +221,7 @@ describe('createIpfsStorageModule - round-trip', () => {
       await createFileInput('File C content', '/c.txt'),
     ];
 
-    const result = await module.uploadBatch(files, {
+    const result = await module.uploadBatch(asAsyncIterable(files), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
     });
@@ -274,7 +276,7 @@ describe('createIpfsStorageModule - round-trip', () => {
 
     // Upload with signal (not aborted)
     const controller = new AbortController();
-    const result = await module.uploadBatch([file], {
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       signal: controller.signal,

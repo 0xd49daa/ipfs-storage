@@ -60,7 +60,7 @@ Module interface with bound IPFS client.
 
 ```typescript
 interface IpfsStorageModule {
-  uploadBatch(files: FileInput[], options: UploadOptions): Promise<BatchResult>;
+  uploadBatch(files: AsyncIterable<StreamingFileInput>, options: UploadOptions): Promise<BatchResult>;
   getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest>;
   downloadFile(file: FileDownloadRef, options?: DownloadOptions): AsyncIterable<Uint8Array>;
   downloadFiles(files: FileDownloadRef[], options?: DownloadFilesOptions): AsyncIterable<DownloadedFile>;
@@ -76,33 +76,32 @@ interface IpfsStorageModule {
 Upload a batch of files to IPFS with encryption.
 
 ```typescript
-uploadBatch(files: FileInput[], options: UploadOptions): Promise<BatchResult>
+uploadBatch(files: AsyncIterable<StreamingFileInput>, options: UploadOptions): Promise<BatchResult>
 ```
 
 **Parameters:**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `files` | `FileInput[]` | Files to upload (non-empty) |
+| `files` | `AsyncIterable<StreamingFileInput>` | Files to upload (non-empty) |
 | `options` | `UploadOptions` | Upload configuration |
 
 **Returns:** `Promise<BatchResult>` — Upload result with CID and manifest
 
 **Throws:**
 - `ValidationError` — Empty batch, invalid paths, no recipients
-- `SegmentUploadError` — Segment upload failed (includes resume state)
-- `AbortUploadError` — Upload aborted via signal (includes resume state)
 
-### FileInput
+### StreamingFileInput
 
-Input for a file to be uploaded.
+Input for a file to be uploaded. Uses a lazy `getStream()` callback for memory efficiency.
 
 ```typescript
-interface FileInput {
-  file: File;           // File object containing binary data
+interface StreamingFileInput {
   path: string;         // Full path in batch (e.g., "/photos/2024/img.jpg")
   contentHash: ContentHash; // BLAKE2b content hash computed by caller
+  size: number;         // File size in bytes (required for chunk planning)
   created?: number;     // Creation timestamp (Unix ms), defaults to Date.now()
+  getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>; // Returns fresh stream
 }
 ```
 
@@ -126,18 +125,28 @@ interface UploadOptions {
   senderKeyPair: X25519KeyPair;      // Sender's key pair for authenticated wrapping
   recipients: RecipientInfo[];        // Recipients who can decrypt (non-empty)
   directories?: DirectoryInput[];     // Explicit directory declarations
-  segmentSize?: number;               // Chunks per CAR segment (default: 10)
   signal?: AbortSignal;               // Cancellation signal
-  resumeState?: UploadState;          // Resume from previous attempt
   onProgress?: UploadProgressCallback;     // Progress callback
-  onSegmentComplete?: SegmentCompleteCallback; // Segment completion callback
+  onChunkUploaded?: ChunkUploadedCallback; // Chunk upload completion callback
+  onSubManifestFlushed?: SubManifestFlushedCallback; // Sub-manifest flush callback
 }
 ```
 
 **Abort Behavior:**
-- Before upload state exists: throws `DOMException` with name `'AbortError'`
-- After upload state exists: throws `AbortUploadError` with `state` for resume
-- Current segment always completes before abort takes effect
+- Throws `DOMException` with name `'AbortError'`
+- Current chunk always completes before abort takes effect
+
+**Memory Management:**
+
+The upload process uses streaming throughout to minimize memory usage:
+
+- **Large files (≥10MB):** Streamed in 10MB chunks, encrypted and uploaded incrementally
+- **Small files (<10MB):** Aggregated into shared chunks using deferred stream consumption
+  - Stream factories are stored during accumulation (not file data)
+  - Streams are only consumed at flush time when the aggregation buffer reaches 10MB
+  - Peak memory: ~10MB (one chunk) rather than sum of all pending file sizes
+
+This ensures bounded memory usage regardless of how many small files are being uploaded.
 
 ### RecipientInfo
 
@@ -161,7 +170,6 @@ interface BatchResult {
   totalSize: number;          // Total encrypted bytes uploaded
   chunkCount: number;         // Number of chunks in batch
   manifestCount: number;      // Number of manifests (1 root + N sub-manifests)
-  segmentsUploaded: number;   // Number of CAR segments uploaded
   renamed?: RenamedFile[];    // Files renamed due to conflicts
 }
 ```
@@ -172,32 +180,42 @@ Progress information during upload.
 
 ```typescript
 interface UploadProgress {
-  phase: 'planning' | 'encrypting' | 'building' | 'uploading' | 'finalizing';
+  phase: 'processing' | 'finalizing';
   filesProcessed: number;     // Files processed so far
-  totalFiles: number;         // Total files in batch
-  bytesProcessed: number;     // Ciphertext bytes processed
-  totalBytes: number;         // Total plaintext size
-  currentSegment?: number;    // Current segment (1-indexed, during 'uploading')
-  totalSegments?: number;     // Total segments
+  totalFiles?: number;        // Total files in batch (undefined for true streaming)
+  bytesProcessed: number;     // Plaintext bytes processed
+  totalBytes?: number;        // Total plaintext size (undefined for true streaming)
+  chunksUploaded: number;     // Chunks uploaded so far
+  subManifestsFlushed: number; // Sub-manifests flushed so far
+  currentFile?: {             // Current file being processed
+    path: string;
+    size: number;
+    bytesRead: number;
+  };
 }
 ```
 
-### UploadState
+### ChunkUploadedInfo
 
-State for resuming uploads (from `SegmentUploadError` or `AbortUploadError`).
+Information about an uploaded chunk.
 
 ```typescript
-interface UploadState {
-  batchId: string;                // Unique batch identifier
-  segments: SegmentState[];       // Per-segment status
-  manifestKeyBase64: string;      // Base64-encoded manifest key (for JSON serialization)
-  chunkCids: Record<string, string>; // Mapping of chunk IDs to CIDs
-  created?: number;               // Batch creation timestamp
+interface ChunkUploadedInfo {
+  chunkId: string;        // Unique chunk identifier
+  cid: string;            // CID of uploaded chunk
+  encryptedSize: number;  // Encrypted size in bytes
 }
+```
 
-interface SegmentState {
-  index: number;                  // Segment index (0-based)
-  status: 'pending' | 'uploading' | 'complete';
+### SubManifestFlushedInfo
+
+Information about a flushed sub-manifest.
+
+```typescript
+interface SubManifestFlushedInfo {
+  index: number;    // Sub-manifest index (0-based)
+  cid: string;      // CID of uploaded sub-manifest
+  fileCount: number; // Number of files in this sub-manifest
 }
 ```
 
@@ -438,9 +456,6 @@ IpfsStorageError (base)
 ├── IntegrityError         — Content hash mismatch
 ├── ManifestError          — Manifest retrieval/decryption failure
 ├── ChunkUnavailableError  — Chunk fetch failed
-├── SegmentUploadError     — Segment upload failed
-├── AbortUploadError       — Upload aborted via signal
-├── ResumeValidationError  — Invalid resume state
 └── CidMismatchError       — CID verification failed
 ```
 
@@ -508,46 +523,6 @@ class ChunkUnavailableError extends IpfsStorageError {
 }
 ```
 
-### SegmentUploadError
-
-Thrown when segment upload fails. Contains state for resume.
-
-```typescript
-class SegmentUploadError extends IpfsStorageError {
-  readonly state: UploadState;
-  readonly segmentIndex: number;
-  readonly cause?: Error;
-}
-```
-
-### AbortUploadError
-
-Thrown when upload is aborted via signal. Contains state for resume.
-
-```typescript
-class AbortUploadError extends IpfsStorageError {
-  readonly state: UploadState;
-  readonly reason?: unknown;
-  readonly cause?: Error;
-}
-```
-
-### ResumeValidationError
-
-Thrown for invalid resume state structure.
-
-```typescript
-class ResumeValidationError extends IpfsStorageError {
-  readonly field: string;
-}
-```
-
-**When thrown:**
-- Missing required fields
-- Invalid base64 manifest key
-- Wrong key length
-- Segment count mismatch
-
 ### CidMismatchError
 
 Thrown when CID verification fails.
@@ -578,7 +553,8 @@ enum ChunkEncryption {
 
 ```typescript
 type UploadProgressCallback = (progress: UploadProgress) => void;
-type SegmentCompleteCallback = (result: SegmentResult) => void;
+type ChunkUploadedCallback = (info: ChunkUploadedInfo) => void;
+type SubManifestFlushedCallback = (info: SubManifestFlushedInfo) => void;
 type DownloadProgressCallback = (progress: DownloadProgress) => void;
 type MultiDownloadProgressCallback = (progress: MultiDownloadProgress) => void;
 type DownloadErrorCallback = (error: Error, file: FileDownloadRef) => void;

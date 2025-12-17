@@ -190,6 +190,8 @@ export interface MockIpfsClientOptions {
   failNextUpload?: boolean;
   /** Delay in ms before upload completes */
   uploadDelay?: number;
+  /** Number of uploads to fail before succeeding (for retry testing) */
+  failUploadCount?: number;
 }
 
 /**
@@ -211,6 +213,9 @@ export class MockIpfsClient implements IpfsClient {
   /** Upload delay in ms */
   private uploadDelay: number;
 
+  /** Number of remaining uploads to fail (for retry testing) */
+  private failUploadCount: number;
+
   /** Latch function called during uploadCar for abort testing */
   private uploadLatch: (() => Promise<void>) | null = null;
 
@@ -222,6 +227,7 @@ export class MockIpfsClient implements IpfsClient {
     this.roots = new Set();
     this.failNextUpload = options?.failNextUpload ?? false;
     this.uploadDelay = options?.uploadDelay ?? 0;
+    this.failUploadCount = options?.failUploadCount ?? 0;
   }
 
   /**
@@ -249,10 +255,16 @@ export class MockIpfsClient implements IpfsClient {
       await new Promise((resolve) => setTimeout(resolve, this.uploadDelay));
     }
 
-    // Check for simulated failure
+    // Check for simulated failure (single shot)
     if (this.failNextUpload) {
       this.failNextUpload = false;
       throw new IpfsUploadError('Simulated upload failure');
+    }
+
+    // Check for simulated failure (countdown for retry testing)
+    if (this.failUploadCount > 0) {
+      this.failUploadCount--;
+      throw new IpfsUploadError('Simulated transient upload failure');
     }
 
     // Parse CAR file
@@ -346,6 +358,14 @@ export class MockIpfsClient implements IpfsClient {
    */
   setFailNextUpload(fail: boolean): void {
     this.failNextUpload = fail;
+  }
+
+  /**
+   * Set number of uploads to fail before succeeding (for retry testing).
+   * Each upload attempt decrements this counter until it reaches 0.
+   */
+  setFailUploadCount(count: number): void {
+    this.failUploadCount = count;
   }
 
   /**

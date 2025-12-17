@@ -19,10 +19,11 @@ import {
   MockIpfsClient,
   ValidationError,
   ManifestError,
-  type FileInput,
+  asAsyncIterable,
+  type StreamingFileInput,
 } from './index.ts';
 import { getManifest } from './manifest-retrieval.ts';
-import { uploadBatch } from './upload.ts';
+import { uploadBatch } from './streaming-upload.ts';
 import {
   encodeManifestEnvelope,
   encodeRootManifest,
@@ -49,16 +50,6 @@ beforeAll(async () => {
   await preloadSodium();
 });
 
-/** Create a File object from string content */
-function createFile(content: string, name = 'test.txt'): File {
-  return new File([content], name, { type: 'text/plain' });
-}
-
-/** Create a File object from Uint8Array */
-function createBinaryFile(data: Uint8Array, name = 'test.bin'): File {
-  return new File([data as BlobPart], name, { type: 'application/octet-stream' });
-}
-
 /** Compute content hash for a string */
 async function hashString(content: string): Promise<ContentHash> {
   const bytes = new TextEncoder().encode(content);
@@ -70,29 +61,40 @@ async function hashBytes(data: Uint8Array): Promise<ContentHash> {
   return (await hashBlake2b(data, 32)) as ContentHash;
 }
 
-/** Create FileInput from string content */
+/** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
-  path: string,
-  name?: string
-): Promise<FileInput> {
+  path: string
+): Promise<StreamingFileInput> {
+  const bytes = new TextEncoder().encode(content);
   return {
-    file: createFile(content, name ?? path.split('/').pop()),
     path,
     contentHash: await hashString(content),
+    size: bytes.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    }),
   };
 }
 
-/** Create FileInput from Uint8Array */
+/** Create StreamingFileInput from Uint8Array */
 async function createBinaryFileInput(
   data: Uint8Array,
-  path: string,
-  name?: string
-): Promise<FileInput> {
+  path: string
+): Promise<StreamingFileInput> {
   return {
-    file: createBinaryFile(data, name ?? path.split('/').pop()),
     path,
     contentHash: await hashBytes(data),
+    size: data.length,
+    getStream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(data);
+        controller.close();
+      }
+    }),
   };
 }
 
@@ -149,7 +151,7 @@ describe('getManifest - basic functionality', () => {
     // Upload a batch
     const file = await createFileInput('Hello, World!', '/hello.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -175,7 +177,7 @@ describe('getManifest - basic functionality', () => {
 
     const file = await createFileInput('test content', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -205,7 +207,7 @@ describe('getManifest - basic functionality', () => {
 
     const file = await createFileInput('content', '/photos/2024/img.jpg');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -238,7 +240,7 @@ describe('getManifest - basic functionality', () => {
     const file1 = await createFileInput('content 1', '/a.txt');
     const file2 = await createFileInput('content 2', '/b.txt');
     const result = await uploadBatch(
-      [file1, file2],
+      asAsyncIterable([file1, file2]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -265,7 +267,7 @@ describe('getManifest - basic functionality', () => {
     const fileContent = 'secret data';
     const file = await createFileInput(fileContent, '/secret.txt');
     const uploadResult = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -314,7 +316,7 @@ describe('getManifest - sender verification', () => {
 
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -340,7 +342,7 @@ describe('getManifest - sender verification', () => {
 
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: senderKeyPair,
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
@@ -375,7 +377,7 @@ describe('getManifest - sender verification', () => {
 
     const file = await createFileInput('secret', '/secret.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: originalSender,
         recipients: [{ publicKey: recipient.publicKey }],
@@ -409,7 +411,7 @@ describe('getManifest - recipient matching', () => {
 
     const file = await createFileInput('multi-recipient', '/data.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: [
@@ -440,7 +442,7 @@ describe('getManifest - recipient matching', () => {
 
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: [{ publicKey: recipient.publicKey }],
@@ -478,7 +480,7 @@ describe('getManifest - sub-manifests', () => {
     // Small batch - no sub-manifests
     const file = await createFileInput('small', '/small.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -569,7 +571,7 @@ describe('getManifest - error handling', () => {
     // Upload a valid batch first
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -627,7 +629,7 @@ describe('getManifest - abort signal', () => {
     // Upload a batch
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -666,7 +668,7 @@ describe('getManifest - abort signal', () => {
 
     const file = await createFileInput('test', '/test.txt');
     const result = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -702,7 +704,7 @@ describe('getManifest - round-trip integration', () => {
     const file1 = await createFileInput('File A content', '/docs/a.txt');
     const file2 = await createFileInput('File B content', '/docs/b.txt');
     const uploadResult = await uploadBatch(
-      [file1, file2],
+      asAsyncIterable([file1, file2]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -748,7 +750,7 @@ describe('getManifest - round-trip integration', () => {
 
     const file = await createFileInput('shared content', '/shared.txt');
     const uploadResult = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: recipients.map((r) => ({ publicKey: r.publicKey })),
@@ -782,7 +784,7 @@ describe('getManifest - round-trip integration', () => {
     const originalContent = 'This is the original file content for testing';
     const file = await createFileInput(originalContent, '/download-test.txt');
     const uploadResult = await uploadBatch(
-      [file],
+      asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
@@ -827,14 +829,19 @@ describe('getManifest - round-trip integration', () => {
     const ipfsClient = new MockIpfsClient();
 
     // Create empty file
-    const emptyFile: FileInput = {
-      file: new File([], 'empty.txt'),
+    const emptyFile: StreamingFileInput = {
       path: '/empty.txt',
       contentHash: await hashBytes(new Uint8Array(0)),
+      size: 0,
+      getStream: () => new ReadableStream({
+        start(controller) {
+          controller.close();
+        }
+      }),
     };
 
     const uploadResult = await uploadBatch(
-      [emptyFile],
+      asAsyncIterable([emptyFile]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],

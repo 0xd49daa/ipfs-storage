@@ -5,28 +5,37 @@ import type {
   X25519KeyPair,
 } from '@0xd49daa/safecrypt';
 
-// Re-export types from errors.ts for upload state tracking
-export type {
-  UploadStateForError as UploadState,
-  SegmentStateForError as SegmentState,
-} from './errors.ts';
-
 // Re-export ChunkEncryption from generated protobuf
 export { ChunkEncryption } from './gen/manifest_pb.ts';
 
 /**
  * Input for a file to be uploaded in a batch.
- * The `File` type is the standard Web API File interface.
+ *
+ * Uses a lazy getStream() callback that is only called when
+ * the file's turn comes to be processed.
+ *
+ * This enables:
+ * - Processing files from lazy AsyncIterables
+ * - Minimal memory usage (~12MB peak regardless of batch size)
+ * - Efficient handling of both many small files and large files
  */
-export interface FileInput {
-  /** File object containing the binary data */
-  file: File;
+export interface StreamingFileInput {
   /** Full path in batch (e.g., "/photos/2024/img.jpg") */
   path: string;
   /** BLAKE2b content hash computed by caller */
   contentHash: ContentHash;
+  /** File size in bytes (required for chunk planning) */
+  size: number;
   /** Creation timestamp (Unix ms), defaults to Date.now() if not provided */
   created?: number;
+  /**
+   * Returns a fresh stream of file content.
+   * Called when the file's turn comes to be processed.
+   * May be called multiple times (e.g., on retry).
+   *
+   * @returns ReadableStream for browser environments, AsyncIterable for Node/Bun
+   */
+  getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>;
 }
 
 /**
@@ -193,42 +202,63 @@ export interface UploadOptions {
   recipients: RecipientInfo[];
   /** Explicit directory declarations (for empty dirs or timestamp overrides) */
   directories?: DirectoryInput[];
-  /** Chunks per CAR segment (default: 10) */
-  segmentSize?: number;
   /**
    * AbortSignal for cancellation.
    *
-   * Abort behavior by phase:
-   * - **Before upload state exists** (planning, encryption): throws `DOMException` with name `'AbortError'`
-   * - **After upload state exists** (during upload): throws `AbortUploadError` with `state` for resume
-   * - Current segment always completes before abort takes effect
-   *
-   * If the signal has a custom `reason`, it is preserved in the error message and
-   * (for `AbortUploadError`) in the `reason` property.
+   * Abort behavior:
+   * - Before any chunks uploaded: throws `DOMException` with name `'AbortError'`
+   * - During upload: throws `DOMException` with name `'AbortError'`
+   * - Current chunk upload completes before abort takes effect
    */
   signal?: AbortSignal;
-  /**
-   * Resume state from previous upload attempt.
-   * When provided, the manifestKey is reused to ensure consistent file key derivation.
-   *
-   * **Important**: All segments are always re-uploaded because encryption uses random
-   * nonces, making CIDs non-deterministic. The resume state ensures the same manifestKey
-   * is used, so file keys remain consistent and previously-downloaded files can still
-   * be decrypted with keys derived from the new upload's manifest.
-   *
-   * Segment count must match (throws ResumeValidationError if files changed).
-   */
-  resumeState?: import('./errors.ts').UploadStateForError;
-  /**
-   * @deprecated This option has no effect. Previously intended to verify segments
-   * exist via ipfsClient.has(), but since all segments are always re-uploaded
-   * (due to non-deterministic encryption), verification is unnecessary.
-   */
-  verifyResumeState?: boolean;
-  /** Progress callback */
+  /** Retry attempts per chunk upload (default: 3) */
+  uploadRetries?: number;
+  /** Progress callback - called during file processing and finalization */
   onProgress?: UploadProgressCallback;
-  /** Segment completion callback */
-  onSegmentComplete?: SegmentCompleteCallback;
+  /**
+   * Called when a chunk is uploaded.
+   * Useful for progress tracking.
+   */
+  onChunkUploaded?: ChunkUploadedCallback;
+  /**
+   * Called when a sub-manifest is flushed and uploaded.
+   * This happens incrementally when accumulated file entries exceed ~1MB.
+   */
+  onSubManifestFlushed?: SubManifestFlushedCallback;
+}
+
+/**
+ * Callback type for chunk upload completion.
+ */
+export type ChunkUploadedCallback = (info: ChunkUploadedInfo) => void;
+
+/**
+ * Information about an uploaded chunk.
+ */
+export interface ChunkUploadedInfo {
+  /** Unique chunk identifier */
+  chunkId: string;
+  /** CID of the uploaded chunk */
+  cid: string;
+  /** Encrypted size in bytes */
+  encryptedSize: number;
+}
+
+/**
+ * Callback type for sub-manifest flush completion.
+ */
+export type SubManifestFlushedCallback = (info: SubManifestFlushedInfo) => void;
+
+/**
+ * Information about a flushed sub-manifest.
+ */
+export interface SubManifestFlushedInfo {
+  /** Sub-manifest index (0-based) */
+  index: number;
+  /** CID of the uploaded sub-manifest */
+  cid: string;
+  /** Number of files in this sub-manifest */
+  fileCount: number;
 }
 
 /**
@@ -245,8 +275,6 @@ export interface BatchResult {
   chunkCount: number;
   /** Number of manifests (1 root + N sub-manifests) */
   manifestCount: number;
-  /** Number of CAR segments uploaded */
-  segmentsUploaded: number;
   /** Files that were renamed due to conflicts */
   renamed?: RenamedFile[];
 }
@@ -268,51 +296,31 @@ export type UploadProgressCallback = (progress: UploadProgress) => void;
 
 /**
  * Upload progress information.
+ *
+ * For streaming uploads, totalFiles and totalBytes may be undefined
+ * if the input is a true lazy AsyncIterable where totals are unknown.
  */
 export interface UploadProgress {
   /** Current phase of upload */
-  phase: 'planning' | 'encrypting' | 'building' | 'uploading' | 'finalizing';
+  phase: 'processing' | 'finalizing';
   /** Files processed so far */
   filesProcessed: number;
-  /** Total files in batch */
-  totalFiles: number;
-  /** Bytes processed so far (ciphertext bytes) */
+  /** Total files in batch (undefined for true streaming where unknown) */
+  totalFiles?: number;
+  /** Bytes processed so far (plaintext bytes) */
   bytesProcessed: number;
-  /** Total bytes to process (plaintext size) */
-  totalBytes: number;
-  /** Current segment being uploaded (1-indexed, during 'uploading' phase) */
-  currentSegment?: number;
-  /** Total segments to upload */
-  totalSegments?: number;
-  /**
-   * @deprecated Always 0. Previously indicated chunks skipped due to resume,
-   * but all segments are now always re-uploaded.
-   */
-  chunksSkipped?: number;
-}
-
-/**
- * Segment completion callback type.
- */
-export type SegmentCompleteCallback = (result: SegmentResult) => void;
-
-/**
- * Result of a segment upload completion.
- */
-export interface SegmentResult {
-  /** Segment index that completed (0-based) */
-  index: number;
-  /** Chunks uploaded in this segment */
+  /** Total bytes to process (undefined for true streaming) */
+  totalBytes?: number;
+  /** Chunks uploaded so far */
   chunksUploaded: number;
-  /**
-   * @deprecated Always 0. Previously indicated chunks skipped due to resume,
-   * but all segments are now always re-uploaded.
-   */
-  chunksSkipped: number;
-  /** Total segments in batch */
-  totalSegments: number;
-  /** Current upload state for persistence */
-  state: import('./errors.ts').UploadStateForError;
+  /** Sub-manifests flushed so far */
+  subManifestsFlushed: number;
+  /** Current file being processed (if any) */
+  currentFile?: {
+    path: string;
+    size: number;
+    bytesRead: number;
+  };
 }
 
 // ============================================================================
@@ -506,11 +514,22 @@ export interface ReadOptions {
 export interface IpfsStorageModule {
   /**
    * Upload a batch of files to IPFS with encryption.
-   * @param files - Files to upload
+   *
+   * Uses streaming processing for memory efficiency:
+   * - Files are processed lazily from the AsyncIterable
+   * - Small files are aggregated into ~10MB chunks
+   * - Large files stream through ~10MB dedicated chunks
+   * - Sub-manifests are flushed incrementally (~1MB threshold)
+   * - Peak memory usage: ~12MB regardless of batch size
+   *
+   * @param files - Async iterable of files to upload
    * @param options - Upload options (sender key, recipients, etc.)
    * @returns Batch result with CID and manifest
    */
-  uploadBatch(files: FileInput[], options: UploadOptions): Promise<BatchResult>;
+  uploadBatch(
+    files: AsyncIterable<StreamingFileInput>,
+    options: UploadOptions
+  ): Promise<BatchResult>;
 
   /**
    * Retrieve and decrypt a batch manifest from IPFS.
