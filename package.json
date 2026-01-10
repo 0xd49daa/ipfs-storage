@@ -13,6 +13,9 @@
   },
   "scripts": {
     "test": "bun test",
+    "test:e2e": "bun test e2e",
+    "test:e2e:dev": "IPFS_API_URL=http://ipfs:5001 bun test e2e",
+    "test:e2e:watch": "IPFS_API_URL=http://ipfs:5001 bun test e2e --watch",
     "typecheck": "bun run --bun tsc --noEmit",
     "proto:generate": "buf generate"
   },

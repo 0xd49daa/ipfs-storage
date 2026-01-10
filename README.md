@@ -165,6 +165,20 @@ bun test --watch      # Watch mode
 bun run typecheck     # Type check
 ```
 
+### E2E in Devcontainer
+
+When running inside the devcontainer, use the IPFS service from
+`.devcontainer/docker-compose.yml`:
+
+```bash
+bun run test:e2e:dev
+bun run test:e2e:watch
+```
+
+`test:e2e` uses the standalone `docker-compose.yml`, while `test:e2e:dev` targets
+`http://ipfs:5001` in the devcontainer network. Ensure the devcontainer and IPFS
+service are healthy before running.
+
 ### MockIpfsClient
 
 The package exports `MockIpfsClient` for testing:
