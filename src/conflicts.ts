@@ -1,6 +1,6 @@
-import { ValidationError } from './errors.ts';
-import { asFilePath, type FilePath } from './branded.ts';
-import { dirname, basename, extname } from './path-utils.ts';
+import { ValidationError } from "./errors.ts";
+import { asFilePath, type FilePath } from "./branded.ts";
+import { basename, dirname, extname } from "./path-utils.ts";
 
 /**
  * Object with a path property for conflict resolution.
@@ -38,7 +38,9 @@ export class PathManager {
       filePath = asFilePath(path);
     } catch (err) {
       throw new ValidationError(
-        `Invalid file path: ${err instanceof Error ? err.message : String(err)}`
+        `Invalid file path: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
     }
 
@@ -53,7 +55,7 @@ export class PathManager {
       const dir = dirname(filePath); // "/photos"
 
       // Build new path, handling root-level files specially to avoid "//"
-      if (dir === '/') {
+      if (dir === "/") {
         resolved = `/${base}_${counter}${ext}`;
       } else {
         resolved = `${dir}/${base}_${counter}${ext}`;
@@ -105,7 +107,9 @@ export function resolveConflicts(files: PathContainer[]): string[] {
       filePath = asFilePath(file.path);
     } catch (err) {
       throw new ValidationError(
-        `Invalid file path: ${err instanceof Error ? err.message : String(err)}`
+        `Invalid file path: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
     }
 
@@ -120,7 +124,7 @@ export function resolveConflicts(files: PathContainer[]): string[] {
       const dir = dirname(filePath); // "/photos"
 
       // Build new path, handling root-level files specially to avoid "//"
-      if (dir === '/') {
+      if (dir === "/") {
         resolved = `/${base}_${counter}${ext}`;
       } else {
         resolved = `${dir}/${base}_${counter}${ext}`;

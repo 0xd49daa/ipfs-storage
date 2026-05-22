@@ -4,7 +4,7 @@
  */
 export const DOMAIN = {
   /** Domain prefix for file key derivation */
-  FILE_KEY: 'ipfs-storage:file-key:v1',
+  FILE_KEY: "ipfs-storage:file-key:v1",
 } as const;
 
 /** Chunk size in bytes (10MB) */
@@ -64,7 +64,7 @@ export const STREAM_CHUNK_SIZE = 64 * 1024;
  */
 export const MANIFEST_DOMAIN = {
   /** Domain context for root manifest encryption */
-  ROOT: 'ipfs-storage:manifest:v1',
+  ROOT: "ipfs-storage:manifest:v1",
   /** Domain context for sub-manifest encryption */
-  SUB: 'ipfs-storage:submanifest:v1',
+  SUB: "ipfs-storage:submanifest:v1",
 } as const;

@@ -1,6 +1,6 @@
-import type { SymmetricKey, ContentHash } from '@0xd49daa/safecrypt';
-import { hashBlake2b } from '@0xd49daa/safecrypt';
-import { DOMAIN } from './constants.ts';
+import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
+import { hashBlake2b } from "@0xd49daa/safecrypt";
+import { DOMAIN } from "./constants.ts";
 
 /** Pre-computed UTF-8 encoded domain prefix */
 const FILE_KEY_DOMAIN = new TextEncoder().encode(DOMAIN.FILE_KEY);
@@ -17,7 +17,7 @@ const FILE_KEY_DOMAIN = new TextEncoder().encode(DOMAIN.FILE_KEY);
  */
 export async function deriveFileKey(
   manifestKey: SymmetricKey,
-  contentHash: ContentHash
+  contentHash: ContentHash,
 ): Promise<SymmetricKey> {
   // Build input: domain (24 bytes) + manifestKey (32 bytes) + contentHash (32 bytes) = 88 bytes
   const input = new Uint8Array(FILE_KEY_DOMAIN.length + 32 + 32);

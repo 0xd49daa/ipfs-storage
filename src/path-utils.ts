@@ -1,14 +1,14 @@
-import { type FilePath, asFilePath, unsafe } from './branded.ts';
+import { asFilePath, type FilePath, unsafe } from "./branded.ts";
 
 /**
  * Check if a path string is valid.
  * Valid paths must start with "/" and not contain "//".
  */
 export function isValidPath(path: string): boolean {
-  if (!path.startsWith('/')) {
+  if (!path.startsWith("/")) {
     return false;
   }
-  if (path.includes('//')) {
+  if (path.includes("//")) {
     return false;
   }
   return true;
@@ -22,7 +22,7 @@ export function isValidPath(path: string): boolean {
 export function normalizePath(path: string): FilePath {
   // Remove trailing slashes (except for root)
   let normalized = path;
-  while (normalized.length > 1 && normalized.endsWith('/')) {
+  while (normalized.length > 1 && normalized.endsWith("/")) {
     normalized = normalized.slice(0, -1);
   }
   return asFilePath(normalized);
@@ -35,10 +35,10 @@ export function normalizePath(path: string): FilePath {
  * "/" → "/"
  */
 export function dirname(path: FilePath): FilePath {
-  const lastSlash = path.lastIndexOf('/');
+  const lastSlash = path.lastIndexOf("/");
   if (lastSlash === 0) {
     // Root or file directly under root
-    return unsafe.asFilePath('/');
+    return unsafe.asFilePath("/");
   }
   return unsafe.asFilePath(path.slice(0, lastSlash));
 }
@@ -49,7 +49,7 @@ export function dirname(path: FilePath): FilePath {
  * "/" → ""
  */
 export function basename(path: FilePath): string {
-  const lastSlash = path.lastIndexOf('/');
+  const lastSlash = path.lastIndexOf("/");
   return path.slice(lastSlash + 1);
 }
 
@@ -64,14 +64,14 @@ export function basename(path: FilePath): string {
 export function extname(path: FilePath): string {
   const filename = basename(path);
   if (!filename) {
-    return '';
+    return "";
   }
 
   // Find the last dot, but not if it's the first character (dotfile)
-  const lastDot = filename.lastIndexOf('.');
+  const lastDot = filename.lastIndexOf(".");
   if (lastDot <= 0) {
     // No dot, or dot is first character (dotfile without extension)
-    return '';
+    return "";
   }
 
   return filename.slice(lastDot);

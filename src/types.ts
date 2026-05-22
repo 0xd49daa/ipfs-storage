@@ -1,12 +1,12 @@
 import type {
-  SymmetricKey,
   ContentHash,
-  X25519PublicKey,
+  SymmetricKey,
   X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+  X25519PublicKey,
+} from "@0xd49daa/safecrypt";
 
 // Re-export ChunkEncryption from generated protobuf
-export { ChunkEncryption } from './gen/manifest_pb.ts';
+export { ChunkEncryption } from "./gen/manifest_pb.ts";
 
 /**
  * Input for a file to be uploaded in a batch.
@@ -33,7 +33,7 @@ export interface StreamingFileInput {
    * Called when the file's turn comes to be processed.
    * May be called multiple times (e.g., on retry).
    *
-   * @returns ReadableStream for browser environments, AsyncIterable for Node/Bun
+   * @returns ReadableStream for browser environments, AsyncIterable for Deno
    */
   getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>;
 }
@@ -62,7 +62,7 @@ export interface ChunkRef {
   /** Original plaintext length (for file size/assembly) */
   length: number;
   /** Encryption method used */
-  encryption: import('./gen/manifest_pb.ts').ChunkEncryption;
+  encryption: import("./gen/manifest_pb.ts").ChunkEncryption;
   /** Actual encrypted segment length in bytes (includes any PADME padding overhead) */
   encryptedLength: number;
 }
@@ -302,7 +302,7 @@ export type UploadProgressCallback = (progress: UploadProgress) => void;
  */
 export interface UploadProgress {
   /** Current phase of upload */
-  phase: 'processing' | 'finalizing';
+  phase: "processing" | "finalizing";
   /** Files processed so far */
   filesProcessed: number;
   /** Total files in batch (undefined for true streaming where unknown) */
@@ -332,7 +332,7 @@ export interface UploadProgress {
  */
 export interface GetManifestOptions {
   /** IPFS client for content retrieval */
-  ipfsClient: import('./ipfs-client.ts').IpfsClient;
+  ipfsClient: import("./ipfs-client.ts").IpfsClient;
   /** Recipient's key pair for unwrapping the manifest key */
   recipientKeyPair: X25519KeyPair;
   /**
@@ -382,9 +382,9 @@ export interface DownloadOptions {
   /** Progress callback */
   onProgress?: DownloadProgressCallback;
   /** Integrity verification mode (default: 'strict') */
-  integrityMode?: 'strict' | 'warn';
+  integrityMode?: "strict" | "warn";
   /** Callback for integrity errors in 'warn' mode */
-  onIntegrityError?: (error: import('./errors.ts').IntegrityError) => void;
+  onIntegrityError?: (error: import("./errors.ts").IntegrityError) => void;
 }
 
 /**
@@ -430,9 +430,9 @@ export interface DownloadFilesOptions {
    */
   onError?: DownloadErrorCallback;
   /** Integrity verification mode (default: 'strict') */
-  integrityMode?: 'strict' | 'warn';
+  integrityMode?: "strict" | "warn";
   /** Callback for integrity errors in 'warn' mode */
-  onIntegrityError?: (error: import('./errors.ts').IntegrityError) => void;
+  onIntegrityError?: (error: import("./errors.ts").IntegrityError) => void;
 }
 
 /**
@@ -451,7 +451,7 @@ export interface DownloadedFile {
  * Multi-file download progress callback type.
  */
 export type MultiDownloadProgressCallback = (
-  progress: MultiDownloadProgress
+  progress: MultiDownloadProgress,
 ) => void;
 
 /**
@@ -476,7 +476,7 @@ export interface MultiDownloadProgress {
  */
 export type DownloadErrorCallback = (
   error: Error,
-  file: FileDownloadRef
+  file: FileDownloadRef,
 ) => void;
 
 // ============================================================================
@@ -488,7 +488,7 @@ export type DownloadErrorCallback = (
  */
 export interface IpfsStorageConfig {
   /** IPFS client for upload/download operations */
-  ipfsClient: import('./ipfs-client.ts').IpfsClient;
+  ipfsClient: import("./ipfs-client.ts").IpfsClient;
 }
 
 /**
@@ -528,7 +528,7 @@ export interface IpfsStorageModule {
    */
   uploadBatch(
     files: AsyncIterable<StreamingFileInput>,
-    options: UploadOptions
+    options: UploadOptions,
   ): Promise<BatchResult>;
 
   /**
@@ -547,7 +547,7 @@ export interface IpfsStorageModule {
    */
   downloadFile(
     file: FileDownloadRef,
-    options?: DownloadOptions
+    options?: DownloadOptions,
   ): AsyncIterable<Uint8Array>;
 
   /**
@@ -558,6 +558,6 @@ export interface IpfsStorageModule {
    */
   downloadFiles(
     files: FileDownloadRef[],
-    options?: DownloadFilesOptions
+    options?: DownloadFilesOptions,
   ): AsyncIterable<DownloadedFile>;
 }

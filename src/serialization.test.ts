@@ -1,27 +1,28 @@
-import { describe, test, expect, beforeAll } from 'bun:test';
+import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { expect } from "@std/expect";
 import {
-  encodeManifestEnvelope,
   decodeManifestEnvelope,
-  encodeRootManifest,
   decodeRootManifest,
-  encodeSubManifest,
   decodeSubManifest,
-} from './serialization.ts';
+  encodeManifestEnvelope,
+  encodeRootManifest,
+  encodeSubManifest,
+} from "./serialization.ts";
 import {
   ChunkEncryption,
+  type FileInfo,
+  type ManifestEnvelopeData,
+  type RecipientKeyInfo,
   type RootManifestData,
   type SubManifestData,
-  type ManifestEnvelopeData,
-  type FileInfo,
-  type RecipientKeyInfo,
-} from './types.ts';
+} from "./types.ts";
 import {
-  preloadSodium,
-  hashBlake2b,
   asContentHash,
+  hashBlake2b,
+  preloadSodium,
   randomBytes,
-} from '@0xd49daa/safecrypt';
-import type { X25519PublicKey, ContentHash } from '@0xd49daa/safecrypt';
+} from "@0xd49daa/safecrypt";
+import type { ContentHash, X25519PublicKey } from "@0xd49daa/safecrypt";
 
 // Helper to create a mock X25519PublicKey (32 bytes)
 async function mockX25519PublicKey(): Promise<X25519PublicKey> {
@@ -34,13 +35,13 @@ async function mockContentHash(): Promise<ContentHash> {
   return asContentHash(await hashBlake2b(data, 32));
 }
 
-describe('Phase 1: Serialization', () => {
+describe("Phase 1: Serialization", () => {
   beforeAll(async () => {
     await preloadSodium();
   });
 
-  describe('ManifestEnvelope', () => {
-    test('round-trip with single recipient', async () => {
+  describe("ManifestEnvelope", () => {
+    test("round-trip with single recipient", async () => {
       const recipientPubKey = await mockX25519PublicKey();
       const senderPubKey = await mockX25519PublicKey();
 
@@ -52,7 +53,7 @@ describe('Phase 1: Serialization', () => {
             nonce: await randomBytes(24),
             ciphertext: await randomBytes(48),
             senderPublicKey: senderPubKey,
-            label: 'MacBook Pro',
+            label: "MacBook Pro",
           },
         ],
       };
@@ -62,16 +63,20 @@ describe('Phase 1: Serialization', () => {
 
       expect(decoded.encryptedManifest).toEqual(original.encryptedManifest);
       expect(decoded.recipients.length).toBe(1);
-      expect(decoded.recipients[0]!.recipientPublicKey).toEqual(recipientPubKey);
-      expect(decoded.recipients[0]!.nonce).toEqual(original.recipients[0]!.nonce);
+      expect(decoded.recipients[0]!.recipientPublicKey).toEqual(
+        recipientPubKey,
+      );
+      expect(decoded.recipients[0]!.nonce).toEqual(
+        original.recipients[0]!.nonce,
+      );
       expect(decoded.recipients[0]!.ciphertext).toEqual(
-        original.recipients[0]!.ciphertext
+        original.recipients[0]!.ciphertext,
       );
       expect(decoded.recipients[0]!.senderPublicKey).toEqual(senderPubKey);
-      expect(decoded.recipients[0]!.label).toBe('MacBook Pro');
+      expect(decoded.recipients[0]!.label).toBe("MacBook Pro");
     });
 
-    test('round-trip with multiple recipients', async () => {
+    test("round-trip with multiple recipients", async () => {
       const recipients: RecipientKeyInfo[] = [];
       const senderPubKey = await mockX25519PublicKey();
 
@@ -99,7 +104,7 @@ describe('Phase 1: Serialization', () => {
       }
     });
 
-    test('handles empty label', async () => {
+    test("handles empty label", async () => {
       const original: ManifestEnvelopeData = {
         encryptedManifest: new Uint8Array([1]),
         recipients: [
@@ -120,25 +125,26 @@ describe('Phase 1: Serialization', () => {
     });
   });
 
-  describe('RootManifest', () => {
-    test('round-trip with directories and files', async () => {
+  describe("RootManifest", () => {
+    test("round-trip with directories and files", async () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
         directories: [
-          { path: '/photos', name: 'photos', created: 1700000000000 },
-          { path: '/photos/2024', name: '2024', created: 1700000000000 },
+          { path: "/photos", name: "photos", created: 1700000000000 },
+          { path: "/photos/2024", name: "2024", created: 1700000000000 },
         ],
         files: [
           {
-            path: '/photos/2024/img.jpg',
-            name: 'img.jpg',
+            path: "/photos/2024/img.jpg",
+            name: "img.jpg",
             size: 1024 * 1024, // 1MB
             contentHash,
             chunks: [
               {
-                chunkId: '6Bv7HnWcL4mT9Rp2QsXx3a',
-                cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+                chunkId: "6Bv7HnWcL4mT9Rp2QsXx3a",
+                cid:
+                  "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
                 offset: 0,
                 length: 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
@@ -156,38 +162,42 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.directories.length).toBe(2);
-      expect(decoded.directories[0]!.path).toBe('/photos');
-      expect(decoded.directories[1]!.path).toBe('/photos/2024');
+      expect(decoded.directories[0]!.path).toBe("/photos");
+      expect(decoded.directories[1]!.path).toBe("/photos/2024");
 
       expect(decoded.files.length).toBe(1);
-      expect(decoded.files[0]!.path).toBe('/photos/2024/img.jpg');
+      expect(decoded.files[0]!.path).toBe("/photos/2024/img.jpg");
       expect(decoded.files[0]!.size).toBe(1024 * 1024);
       expect(decoded.files[0]!.contentHash).toEqual(contentHash);
-      expect(decoded.files[0]!.chunks[0]!.encryptedLength).toBe(1024 * 1024 + 40);
+      expect(decoded.files[0]!.chunks[0]!.encryptedLength).toBe(
+        1024 * 1024 + 40,
+      );
       expect(decoded.files[0]!.chunks.length).toBe(1);
-      expect(decoded.files[0]!.chunks[0]!.chunkId).toBe('6Bv7HnWcL4mT9Rp2QsXx3a');
+      expect(decoded.files[0]!.chunks[0]!.chunkId).toBe(
+        "6Bv7HnWcL4mT9Rp2QsXx3a",
+      );
       expect(decoded.files[0]!.chunks[0]!.encryption).toBe(
-        ChunkEncryption.SINGLE_SHOT
+        ChunkEncryption.SINGLE_SHOT,
       );
 
       expect(decoded.created).toBe(1700000000000);
     });
 
-    test('round-trip with sub-manifests', async () => {
+    test("round-trip with sub-manifests", async () => {
       const original: RootManifestData = {
         directories: [],
         files: [],
         subManifests: [
           {
-            manifestId: 'm_0',
-            startPath: '/a/file1.txt',
-            endPath: '/m/file999.txt',
+            manifestId: "m_0",
+            startPath: "/a/file1.txt",
+            endPath: "/m/file999.txt",
             fileCount: 500,
           },
           {
-            manifestId: 'm_1',
-            startPath: '/n/file1000.txt',
-            endPath: '/z/file2000.txt',
+            manifestId: "m_1",
+            startPath: "/n/file1000.txt",
+            endPath: "/z/file2000.txt",
             fileCount: 500,
           },
         ],
@@ -198,12 +208,12 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.subManifests.length).toBe(2);
-      expect(decoded.subManifests[0]!.manifestId).toBe('m_0');
+      expect(decoded.subManifests[0]!.manifestId).toBe("m_0");
       expect(decoded.subManifests[0]!.fileCount).toBe(500);
-      expect(decoded.subManifests[1]!.manifestId).toBe('m_1');
+      expect(decoded.subManifests[1]!.manifestId).toBe("m_1");
     });
 
-    test('handles empty arrays', async () => {
+    test("handles empty arrays", async () => {
       const original: RootManifestData = {
         directories: [],
         files: [],
@@ -219,37 +229,37 @@ describe('Phase 1: Serialization', () => {
       expect(decoded.subManifests).toEqual([]);
     });
 
-    test('handles file spanning multiple chunks', async () => {
+    test("handles file spanning multiple chunks", async () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
         directories: [],
         files: [
           {
-            path: '/large-file.bin',
-            name: 'large-file.bin',
+            path: "/large-file.bin",
+            name: "large-file.bin",
             size: 25 * 1024 * 1024, // 25MB
             contentHash,
             chunks: [
               {
-                chunkId: 'chunk1chunk1chunk1chun',
-                cid: 'cid1',
+                chunkId: "chunk1chunk1chunk1chun",
+                cid: "cid1",
                 offset: 0,
                 length: 10 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
                 encryptedLength: 10 * 1024 * 1024 + 40,
               },
               {
-                chunkId: 'chunk2chunk2chunk2chun',
-                cid: 'cid2',
+                chunkId: "chunk2chunk2chunk2chun",
+                cid: "cid2",
                 offset: 0,
                 length: 10 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
                 encryptedLength: 10 * 1024 * 1024 + 40,
               },
               {
-                chunkId: 'chunk3chunk3chunk3chun',
-                cid: 'cid3',
+                chunkId: "chunk3chunk3chunk3chun",
+                cid: "cid3",
                 offset: 0,
                 length: 5 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
@@ -269,21 +279,21 @@ describe('Phase 1: Serialization', () => {
       expect(decoded.files[0]!.chunks.length).toBe(3);
     });
 
-    test('handles STREAMING encryption enum', async () => {
+    test("handles STREAMING encryption enum", async () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
         directories: [],
         files: [
           {
-            path: '/file.bin',
-            name: 'file.bin',
+            path: "/file.bin",
+            name: "file.bin",
             size: 100,
             contentHash,
             chunks: [
               {
-                chunkId: 'streamchunkstreamchunk',
-                cid: 'cidstream',
+                chunkId: "streamchunkstreamchunk",
+                cid: "cidstream",
                 offset: 0,
                 length: 100,
                 encryption: ChunkEncryption.STREAMING,
@@ -301,16 +311,16 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeRootManifest(encoded);
 
       expect(decoded.files[0]!.chunks[0]!.encryption).toBe(
-        ChunkEncryption.STREAMING
+        ChunkEncryption.STREAMING,
       );
     });
 
-    test('handles large timestamps', () => {
+    test("handles large timestamps", () => {
       const futureTimestamp = 4102444800000; // Year 2100
 
       const original: RootManifestData = {
         directories: [
-          { path: '/test', name: 'test', created: futureTimestamp },
+          { path: "/test", name: "test", created: futureTimestamp },
         ],
         files: [],
         subManifests: [],
@@ -325,20 +335,20 @@ describe('Phase 1: Serialization', () => {
     });
   });
 
-  describe('SubManifest', () => {
-    test('round-trip with multiple files', async () => {
+  describe("SubManifest", () => {
+    test("round-trip with multiple files", async () => {
       const files: FileInfo[] = [];
 
       for (let i = 0; i < 100; i++) {
         const contentHash = await mockContentHash();
         files.push({
-          path: `/dir/file_${i.toString().padStart(3, '0')}.txt`,
-          name: `file_${i.toString().padStart(3, '0')}.txt`,
+          path: `/dir/file_${i.toString().padStart(3, "0")}.txt`,
+          name: `file_${i.toString().padStart(3, "0")}.txt`,
           size: 1000 + i,
           contentHash,
           chunks: [
             {
-              chunkId: `chunk${i.toString().padStart(17, '0')}`,
+              chunkId: `chunk${i.toString().padStart(17, "0")}`,
               cid: `cid${i}`,
               offset: 0,
               length: 1000 + i,
@@ -356,23 +366,23 @@ describe('Phase 1: Serialization', () => {
       const decoded = decodeSubManifest(encoded);
 
       expect(decoded.files.length).toBe(100);
-      expect(decoded.files[50]!.path).toBe('/dir/file_050.txt');
+      expect(decoded.files[50]!.path).toBe("/dir/file_050.txt");
       expect(decoded.files[50]!.size).toBe(1050);
     });
   });
 
-  describe('empty file handling', () => {
-    test('handles empty file (size 0, no chunks)', async () => {
+  describe("empty file handling", () => {
+    test("handles empty file (size 0, no chunks)", async () => {
       const contentHash = asContentHash(
-        await hashBlake2b(new Uint8Array(0), 32)
+        await hashBlake2b(new Uint8Array(0), 32),
       );
 
       const original: RootManifestData = {
         directories: [],
         files: [
           {
-            path: '/empty.txt',
-            name: 'empty.txt',
+            path: "/empty.txt",
+            name: "empty.txt",
             size: 0,
             contentHash,
             chunks: [],
@@ -391,8 +401,8 @@ describe('Phase 1: Serialization', () => {
     });
   });
 
-  describe('serialization efficiency', () => {
-    test('large file count serializes efficiently', async () => {
+  describe("serialization efficiency", () => {
+    test("large file count serializes efficiently", async () => {
       const contentHash = await mockContentHash();
       const files: FileInfo[] = [];
 
@@ -404,8 +414,9 @@ describe('Phase 1: Serialization', () => {
           contentHash,
           chunks: [
             {
-              chunkId: `id${i.toString().padStart(18, '0')}`,
-              cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+              chunkId: `id${i.toString().padStart(18, "0")}`,
+              cid:
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
               offset: 0,
               length: 100,
               encryption: ChunkEncryption.SINGLE_SHOT,
@@ -433,8 +444,8 @@ describe('Phase 1: Serialization', () => {
     });
   });
 
-  describe('validation', () => {
-    test('throws on invalid nonce size in encode', async () => {
+  describe("validation", () => {
+    test("throws on invalid nonce size in encode", async () => {
       const envelope: ManifestEnvelopeData = {
         encryptedManifest: new Uint8Array([1]),
         recipients: [
@@ -448,11 +459,11 @@ describe('Phase 1: Serialization', () => {
       };
 
       expect(() => encodeManifestEnvelope(envelope)).toThrow(
-        'Invalid nonce: expected 24 bytes'
+        "Invalid nonce: expected 24 bytes",
       );
     });
 
-    test('throws on invalid ciphertext size in encode', async () => {
+    test("throws on invalid ciphertext size in encode", async () => {
       const envelope: ManifestEnvelopeData = {
         encryptedManifest: new Uint8Array([1]),
         recipients: [
@@ -466,11 +477,11 @@ describe('Phase 1: Serialization', () => {
       };
 
       expect(() => encodeManifestEnvelope(envelope)).toThrow(
-        'Invalid wrapped key ciphertext: expected 48 bytes'
+        "Invalid wrapped key ciphertext: expected 48 bytes",
       );
     });
 
-    test('throws on invalid public key size in decode', async () => {
+    test("throws on invalid public key size in decode", async () => {
       // Create a valid envelope first
       const validEnvelope: ManifestEnvelopeData = {
         encryptedManifest: new Uint8Array([1]),
@@ -502,7 +513,7 @@ describe('Phase 1: Serialization', () => {
           encryptedManifest: new Uint8Array([1]),
           recipients: [info],
         });
-      }).toThrow('Invalid X25519 public key');
+      }).toThrow("Invalid X25519 public key");
     });
   });
 });

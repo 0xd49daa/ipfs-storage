@@ -1,7 +1,7 @@
-import type { DirectoryInfo, DirectoryInput } from './types.ts';
-import { ValidationError } from './errors.ts';
-import { type FilePath, unsafe } from './branded.ts';
-import { dirname, basename, normalizePath, isValidPath } from './path-utils.ts';
+import type { DirectoryInfo, DirectoryInput } from "./types.ts";
+import { ValidationError } from "./errors.ts";
+import { type FilePath, unsafe } from "./branded.ts";
+import { basename, dirname, isValidPath, normalizePath } from "./path-utils.ts";
 
 /**
  * Options for buildDirectoryTree.
@@ -20,7 +20,7 @@ function getAncestors(path: FilePath | string): FilePath[] {
   const ancestors: FilePath[] = [];
   let current = dirname(path as FilePath);
 
-  while (current !== '/') {
+  while (current !== "/") {
     ancestors.push(current);
     current = dirname(current);
   }
@@ -55,11 +55,11 @@ export class DirectoryTreeBuilder {
       for (const dir of explicitDirs) {
         // Validate path
         if (!dir.path || dir.path.length === 0) {
-          throw new ValidationError('Directory path cannot be empty');
+          throw new ValidationError("Directory path cannot be empty");
         }
         if (!isValidPath(dir.path)) {
           throw new ValidationError(
-            `Invalid directory path: must start with "/" and not contain "//", got "${dir.path}"`
+            `Invalid directory path: must start with "/" and not contain "//", got "${dir.path}"`,
           );
         }
 
@@ -67,9 +67,9 @@ export class DirectoryTreeBuilder {
         const normalized = normalizePath(dir.path);
 
         // Reject root "/" explicitly
-        if (normalized === '/') {
+        if (normalized === "/") {
           throw new ValidationError(
-            'Root directory "/" cannot be declared explicitly'
+            'Root directory "/" cannot be declared explicitly',
           );
         }
 
@@ -86,7 +86,10 @@ export class DirectoryTreeBuilder {
         const ancestors = getAncestors(normalized);
         for (const ancestor of ancestors) {
           if (!this.dirMap.has(ancestor)) {
-            this.dirMap.set(ancestor, { created: defaultCreated, isExplicit: false });
+            this.dirMap.set(ancestor, {
+              created: defaultCreated,
+              isExplicit: false,
+            });
           }
         }
       }
@@ -103,7 +106,7 @@ export class DirectoryTreeBuilder {
     // Validate input path
     if (!isValidPath(resolvedPath)) {
       throw new ValidationError(
-        `Invalid file path: must start with "/" and not contain "//", got "${resolvedPath}"`
+        `Invalid file path: must start with "/" and not contain "//", got "${resolvedPath}"`,
       );
     }
 
@@ -112,7 +115,10 @@ export class DirectoryTreeBuilder {
 
     for (const ancestor of ancestors) {
       if (!this.dirMap.has(ancestor)) {
-        this.dirMap.set(ancestor, { created: this.defaultCreated, isExplicit: false });
+        this.dirMap.set(ancestor, {
+          created: this.defaultCreated,
+          isExplicit: false,
+        });
       }
     }
   }
@@ -163,7 +169,7 @@ export class DirectoryTreeBuilder {
 export function buildDirectoryTree(
   resolvedPaths: string[],
   explicitDirs?: DirectoryInput[],
-  options?: BuildDirectoryTreeOptions
+  options?: BuildDirectoryTreeOptions,
 ): DirectoryInfo[] {
   // Pin timestamp once at entry for determinism
   const defaultTs = options?.defaultCreated ?? Date.now();
@@ -176,7 +182,7 @@ export function buildDirectoryTree(
     // Validate input paths
     if (!isValidPath(path)) {
       throw new ValidationError(
-        `Invalid file path: must start with "/" and not contain "//", got "${path}"`
+        `Invalid file path: must start with "/" and not contain "//", got "${path}"`,
       );
     }
 
@@ -195,11 +201,11 @@ export function buildDirectoryTree(
     for (const dir of explicitDirs) {
       // Validate path
       if (!dir.path || dir.path.length === 0) {
-        throw new ValidationError('Directory path cannot be empty');
+        throw new ValidationError("Directory path cannot be empty");
       }
       if (!isValidPath(dir.path)) {
         throw new ValidationError(
-          `Invalid directory path: must start with "/" and not contain "//", got "${dir.path}"`
+          `Invalid directory path: must start with "/" and not contain "//", got "${dir.path}"`,
         );
       }
 
@@ -207,9 +213,9 @@ export function buildDirectoryTree(
       const normalized = normalizePath(dir.path);
 
       // Reject root "/" explicitly
-      if (normalized === '/') {
+      if (normalized === "/") {
         throw new ValidationError(
-          'Root directory "/" cannot be declared explicitly'
+          'Root directory "/" cannot be declared explicitly',
         );
       }
 

@@ -5,30 +5,31 @@
  * when chunk uploads fail due to transient errors.
  */
 
-import { describe, test, expect, beforeAll, beforeEach } from 'bun:test';
+import { beforeAll, beforeEach, describe, it as test } from "@std/testing/bdd";
+import { expect } from "@std/expect";
 import {
-  preloadSodium,
+  type ContentHash,
   deriveEncryptionKeyPair,
   deriveSeed,
   hashBlake2b,
-  type ContentHash,
+  preloadSodium,
   type X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+} from "@0xd49daa/safecrypt";
 import {
-  createIpfsStorageModule,
-  MockIpfsClient,
-  ChunkUploadError,
   asAsyncIterable,
-  type StreamingFileInput,
+  ChunkUploadError,
+  createIpfsStorageModule,
   type IpfsStorageModule,
-} from './index.ts';
+  MockIpfsClient,
+  type StreamingFileInput,
+} from "./index.ts";
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
 const TEST_MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
   const seed = await deriveSeed(TEST_MNEMONIC);
@@ -37,7 +38,7 @@ async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
 
 async function createFileInput(
   content: string,
-  path: string
+  path: string,
 ): Promise<StreamingFileInput> {
   const bytes = new TextEncoder().encode(content);
   return {
@@ -58,7 +59,7 @@ async function createFileInput(
 // Retry Tests
 // ============================================================================
 
-describe('Upload Retry Mechanism', () => {
+describe("Upload Retry Mechanism", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -75,11 +76,11 @@ describe('Upload Retry Mechanism', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('succeeds after transient failures within retry limit', async () => {
+  test("succeeds after transient failures within retry limit", async () => {
     // Set up: fail 2 times, then succeed (within default 3 retries)
     ipfsClient.setFailUploadCount(2);
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -90,26 +91,26 @@ describe('Upload Retry Mechanism', () => {
     expect(result.chunkCount).toBeGreaterThan(0);
   });
 
-  test('fails with ChunkUploadError when retries exhausted', async () => {
+  test("fails with ChunkUploadError when retries exhausted", async () => {
     // Set up: fail more times than the retry limit
     ipfsClient.setFailUploadCount(5);
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     await expect(
       module.uploadBatch(asAsyncIterable([file]), {
         senderKeyPair,
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
         uploadRetries: 3,
-      })
+      }),
     ).rejects.toBeInstanceOf(ChunkUploadError);
   });
 
-  test('respects custom uploadRetries option', async () => {
+  test("respects custom uploadRetries option", async () => {
     // Set up: fail 4 times
     ipfsClient.setFailUploadCount(4);
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     // With 5 retries, it should succeed (4 failures + 1 success)
     const result = await module.uploadBatch(asAsyncIterable([file]), {
@@ -121,11 +122,11 @@ describe('Upload Retry Mechanism', () => {
     expect(result.cid).toBeDefined();
   });
 
-  test('uploadRetries=1 means no retries', async () => {
+  test("uploadRetries=1 means no retries", async () => {
     // Set up: fail once
     ipfsClient.setFailUploadCount(1);
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     // With uploadRetries=1, only one attempt is made, so it should fail
     await expect(
@@ -133,11 +134,11 @@ describe('Upload Retry Mechanism', () => {
         senderKeyPair,
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
         uploadRetries: 1,
-      })
+      }),
     ).rejects.toBeInstanceOf(ChunkUploadError);
   });
 
-  test('does not retry on abort', async () => {
+  test("does not retry on abort", async () => {
     const controller = new AbortController();
     let uploadAttempts = 0;
 
@@ -149,7 +150,7 @@ describe('Upload Retry Mechanism', () => {
       }
     });
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     try {
       await module.uploadBatch(asAsyncIterable([file]), {
@@ -157,10 +158,10 @@ describe('Upload Retry Mechanism', () => {
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
         signal: controller.signal,
       });
-      expect.unreachable('Should have thrown');
+      throw new Error("Should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(DOMException);
-      expect((error as DOMException).name).toBe('AbortError');
+      expect((error as DOMException).name).toBe("AbortError");
     }
 
     // Clear latch
@@ -170,10 +171,10 @@ describe('Upload Retry Mechanism', () => {
     expect(uploadAttempts).toBe(1);
   });
 
-  test('ChunkUploadError contains CID of failed chunk', async () => {
+  test("ChunkUploadError contains CID of failed chunk", async () => {
     ipfsClient.setFailUploadCount(5);
 
-    const file = await createFileInput('Hello, World!', '/test.txt');
+    const file = await createFileInput("Hello, World!", "/test.txt");
 
     try {
       await module.uploadBatch(asAsyncIterable([file]), {
@@ -181,7 +182,7 @@ describe('Upload Retry Mechanism', () => {
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
         uploadRetries: 2,
       });
-      expect.unreachable('Should have thrown');
+      throw new Error("Should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(ChunkUploadError);
       const chunkError = error as ChunkUploadError;

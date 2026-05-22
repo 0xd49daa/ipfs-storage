@@ -13,46 +13,56 @@
  * 6. Final CAR contains directory structure linking to uploaded chunks
  */
 
-import { generateKey, randomBytes, type SymmetricKey, type ContentHash } from '@0xd49daa/safecrypt';
-import { base58 } from '@scure/base';
-import { CID } from 'multiformats/cid';
-import { CarBufferWriter } from '@ipld/car';
-import * as dagPb from '@ipld/dag-pb';
+import {
+  type ContentHash,
+  generateKey,
+  randomBytes,
+  type SymmetricKey,
+} from "@0xd49daa/safecrypt";
+import { base58 } from "@scure/base";
+import { CID } from "multiformats/cid";
+import { CarBufferWriter } from "@ipld/car";
+import * as dagPb from "@ipld/dag-pb";
 
-import type { ChunkId } from './branded.ts';
-import type { IpfsClient } from './ipfs-client.ts';
+import type { ChunkId } from "./branded.ts";
+import type { IpfsClient } from "./ipfs-client.ts";
 import type {
-  StreamingFileInput,
-  FileInfo,
-  DirectoryInfo,
-  ChunkRef,
   BatchManifest,
-  UploadOptions,
   BatchResult,
+  ChunkRef,
+  DirectoryInfo,
+  FileInfo,
   RenamedFile,
+  StreamingFileInput,
+  UploadOptions,
   UploadProgress,
-} from './types.ts';
-import { ChunkEncryption } from './gen/manifest_pb.ts';
+} from "./types.ts";
+import { ChunkEncryption } from "./gen/manifest_pb.ts";
 
-import { ValidationError, ChunkUploadError } from './errors.ts';
-import { PathManager } from './conflicts.ts';
-import { DirectoryTreeBuilder } from './directories.ts';
-import { generateChunkId, chunkIdToPath } from './chunk-id.ts';
-import { deriveFileKey } from './crypto.ts';
-import { encryptManifest, buildManifest } from './manifest-builder.ts';
-import { computeRawCid, computeDagPbCid } from './ipfs-client.ts';
-import { basename } from './path-utils.ts';
-import { padme } from './padme.ts';
-import { CHUNK_SIZE, SUB_MANIFEST_SIZE, STREAMING_THRESHOLD, DEFAULT_RETRIES } from './constants.ts';
+import { ChunkUploadError, ValidationError } from "./errors.ts";
+import { PathManager } from "./conflicts.ts";
+import { DirectoryTreeBuilder } from "./directories.ts";
+import { chunkIdToPath, generateChunkId } from "./chunk-id.ts";
+import { deriveFileKey } from "./crypto.ts";
+import { buildManifest, encryptManifest } from "./manifest-builder.ts";
+import { computeDagPbCid, computeRawCid } from "./ipfs-client.ts";
+import { basename } from "./path-utils.ts";
+import { padme } from "./padme.ts";
+import {
+  CHUNK_SIZE,
+  DEFAULT_RETRIES,
+  STREAMING_THRESHOLD,
+  SUB_MANIFEST_SIZE,
+} from "./constants.ts";
 import {
   NONCE_SIZE,
   SINGLE_SHOT_OVERHEAD,
-  STREAM_HEADER_SIZE,
   STREAM_CHUNK_OVERHEAD,
   STREAM_CHUNK_SIZE,
-} from './constants.ts';
-import { encrypt, createEncryptStream } from '@0xd49daa/safecrypt';
-import { encodeSubManifest } from './serialization.ts';
+  STREAM_HEADER_SIZE,
+} from "./constants.ts";
+import { createEncryptStream, encrypt } from "@0xd49daa/safecrypt";
+import { encodeSubManifest } from "./serialization.ts";
 
 // ============================================================================
 // Constants
@@ -127,8 +137,8 @@ interface ProcessingContext {
   signal?: AbortSignal;
   uploadRetries: number;
   onProgress?: (progress: UploadProgress) => void;
-  onChunkUploaded?: UploadOptions['onChunkUploaded'];
-  onSubManifestFlushed?: UploadOptions['onSubManifestFlushed'];
+  onChunkUploaded?: UploadOptions["onChunkUploaded"];
+  onSubManifestFlushed?: UploadOptions["onSubManifestFlushed"];
 
   // State tracking
   uploadedChunks: Map<string, UploadedChunk>; // chunkId -> UploadedChunk
@@ -160,15 +170,15 @@ function checkAbort(signal?: AbortSignal): void {
     const reason = signal.reason;
     let message: string;
     if (reason === undefined || reason === null) {
-      message = 'Upload aborted';
+      message = "Upload aborted";
     } else if (reason instanceof Error) {
       message = reason.message;
-    } else if (typeof reason === 'string') {
+    } else if (typeof reason === "string") {
       message = reason;
     } else {
-      message = 'Upload aborted';
+      message = "Upload aborted";
     }
-    throw new DOMException(message, 'AbortError');
+    throw new DOMException(message, "AbortError");
   }
 }
 
@@ -183,7 +193,7 @@ function checkAbort(signal?: AbortSignal): void {
 async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<T> {
   let lastError: Error | undefined;
 
@@ -194,7 +204,7 @@ async function withRetry<T>(
       return await fn();
     } catch (error) {
       // Don't retry on abort
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (error instanceof DOMException && error.name === "AbortError") {
         throw error;
       }
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -230,7 +240,7 @@ async function uploadSingleBlock(
   data: Uint8Array,
   ipfsClient: IpfsClient,
   maxRetries: number = DEFAULT_RETRIES,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<{ cid: CID; cidString: string }> {
   const cid = await computeRawCid(data);
 
@@ -251,16 +261,16 @@ async function uploadSingleBlock(
         await ipfsClient.uploadCar(carGenerator());
       },
       maxRetries,
-      signal
+      signal,
     );
   } catch (error) {
     // Wrap non-abort errors in ChunkUploadError
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ChunkUploadError(
       cid.toString(),
-      error instanceof Error ? error : undefined
+      error instanceof Error ? error : undefined,
     );
   }
 
@@ -277,7 +287,7 @@ async function uploadSingleBlock(
  */
 async function encryptSingleShot(
   plaintext: Uint8Array,
-  key: SymmetricKey
+  key: SymmetricKey,
 ): Promise<Uint8Array> {
   const { nonce, ciphertext } = await encrypt(plaintext, key);
   const result = new Uint8Array(NONCE_SIZE + ciphertext.length);
@@ -293,14 +303,14 @@ async function encryptSingleShot(
 async function encryptStreaming(
   plaintext: Uint8Array,
   key: SymmetricKey,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const stream = await createEncryptStream(key);
 
   try {
     const numChunks = Math.ceil(plaintext.length / STREAM_CHUNK_SIZE);
-    const outputSize =
-      STREAM_HEADER_SIZE + plaintext.length + numChunks * STREAM_CHUNK_OVERHEAD;
+    const outputSize = STREAM_HEADER_SIZE + plaintext.length +
+      numChunks * STREAM_CHUNK_OVERHEAD;
 
     const result = new Uint8Array(outputSize);
     let writeOffset = 0;
@@ -339,18 +349,16 @@ async function encryptSegment(
   plaintext: Uint8Array,
   manifestKey: SymmetricKey,
   contentHash: ContentHash,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<{ encrypted: Uint8Array; encryption: ChunkEncryption }> {
   const fileKey = await deriveFileKey(manifestKey, contentHash);
-  const encryption =
-    plaintext.length <= STREAMING_THRESHOLD
-      ? ChunkEncryption.SINGLE_SHOT
-      : ChunkEncryption.STREAMING;
+  const encryption = plaintext.length <= STREAMING_THRESHOLD
+    ? ChunkEncryption.SINGLE_SHOT
+    : ChunkEncryption.STREAMING;
 
-  const encrypted =
-    encryption === ChunkEncryption.SINGLE_SHOT
-      ? await encryptSingleShot(plaintext, fileKey)
-      : await encryptStreaming(plaintext, fileKey, signal);
+  const encrypted = encryption === ChunkEncryption.SINGLE_SHOT
+    ? await encryptSingleShot(plaintext, fileKey)
+    : await encryptStreaming(plaintext, fileKey, signal);
 
   return { encrypted, encryption };
 }
@@ -371,7 +379,7 @@ class AggregationBufferManager {
   constructor(
     private manifestKey: SymmetricKey,
     private ipfsClient: IpfsClient,
-    private context: ProcessingContext
+    private context: ProcessingContext,
   ) {}
 
   get currentSize(): number {
@@ -390,7 +398,7 @@ class AggregationBufferManager {
     fileIndex: number,
     data: Uint8Array,
     fileOffset: number,
-    contentHash: ContentHash
+    contentHash: ContentHash,
   ): Promise<UploadedChunk | null> {
     // Generate chunk ID on first segment
     if (this.pendingChunkId === null) {
@@ -424,14 +432,20 @@ class AggregationBufferManager {
     size: number,
     fileOffset: number,
     contentHash: ContentHash,
-    getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>
+    getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>,
   ): Promise<UploadedChunk | null> {
     // Generate chunk ID on first segment
     if (this.pendingChunkId === null) {
       this.pendingChunkId = await generateChunkId();
     }
 
-    this.streamSegments.push({ fileIndex, size, fileOffset, contentHash, getStream });
+    this.streamSegments.push({
+      fileIndex,
+      size,
+      fileOffset,
+      contentHash,
+      getStream,
+    });
     this.totalSize += size;
 
     // Flush if full
@@ -447,7 +461,7 @@ class AggregationBufferManager {
    */
   private async readStreamFully(
     getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>,
-    expectedSize: number
+    expectedSize: number,
   ): Promise<Uint8Array> {
     const result = new Uint8Array(expectedSize);
     const stream = toAsyncIterable(getStream());
@@ -456,14 +470,18 @@ class AggregationBufferManager {
     for await (const chunk of stream) {
       checkAbort(this.context.signal);
       if (offset + chunk.length > expectedSize) {
-        throw new ValidationError(`Stream exceeded expected size: ${expectedSize}`);
+        throw new ValidationError(
+          `Stream exceeded expected size: ${expectedSize}`,
+        );
       }
       result.set(chunk, offset);
       offset += chunk.length;
     }
 
     if (offset !== expectedSize) {
-      throw new ValidationError(`Stream size mismatch: expected ${expectedSize}, got ${offset}`);
+      throw new ValidationError(
+        `Stream size mismatch: expected ${expectedSize}, got ${offset}`,
+      );
     }
 
     return result;
@@ -485,7 +503,7 @@ class AggregationBufferManager {
 
     // Encrypt each segment and concatenate
     const encryptedParts: Uint8Array[] = [];
-    const segmentInfos: UploadedChunk['segments'] = [];
+    const segmentInfos: UploadedChunk["segments"] = [];
     let encryptedOffset = 0;
     let totalPlaintext = 0;
     let processedCount = 0;
@@ -515,7 +533,7 @@ class AggregationBufferManager {
         plaintext,
         this.manifestKey,
         segment.contentHash,
-        this.context.signal
+        this.context.signal,
       );
 
       segmentInfos.push({
@@ -535,7 +553,10 @@ class AggregationBufferManager {
       const segment = this.streamSegments[i]!;
 
       // Read stream fully at flush time (lazy consumption)
-      let plaintext = await this.readStreamFully(segment.getStream, segment.size);
+      let plaintext = await this.readStreamFully(
+        segment.getStream,
+        segment.size,
+      );
       const originalLength = plaintext.length;
       totalPlaintext += originalLength;
 
@@ -557,7 +578,7 @@ class AggregationBufferManager {
         plaintext,
         this.manifestKey,
         segment.contentHash,
-        this.context.signal
+        this.context.signal,
       );
 
       segmentInfos.push({
@@ -573,7 +594,10 @@ class AggregationBufferManager {
     }
 
     // Concatenate encrypted parts
-    const totalEncryptedSize = encryptedParts.reduce((sum, p) => sum + p.length, 0);
+    const totalEncryptedSize = encryptedParts.reduce(
+      (sum, p) => sum + p.length,
+      0,
+    );
     const encryptedData = new Uint8Array(totalEncryptedSize);
     let writeOffset = 0;
     for (const part of encryptedParts) {
@@ -588,7 +612,7 @@ class AggregationBufferManager {
       encryptedData,
       this.ipfsClient,
       this.context.uploadRetries,
-      this.context.signal
+      this.context.signal,
     );
 
     const uploadedChunk: UploadedChunk = {
@@ -628,7 +652,7 @@ class AggregationBufferManager {
  * Convert ReadableStream or AsyncIterable to AsyncIterable<Uint8Array>
  */
 function toAsyncIterable(
-  source: ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>
+  source: ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>,
 ): AsyncIterable<Uint8Array> {
   if (Symbol.asyncIterator in source) {
     return source as AsyncIterable<Uint8Array>;
@@ -657,7 +681,7 @@ function toAsyncIterable(
 async function readExactly(
   iter: AsyncIterator<Uint8Array>,
   size: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   let bytesRead = 0;
@@ -700,7 +724,7 @@ async function readExactly(
 async function processLargeFile(
   file: StreamingFileInput,
   fileIndex: number,
-  context: ProcessingContext
+  context: ProcessingContext,
 ): Promise<ChunkRef[]> {
   const chunkRefs: ChunkRef[] = [];
   const stream = toAsyncIterable(file.getStream());
@@ -747,7 +771,7 @@ async function processLargeFile(
       chunkData,
       context.manifestKey,
       file.contentHash,
-      context.signal
+      context.signal,
     );
 
     checkAbort(context.signal);
@@ -757,7 +781,7 @@ async function processLargeFile(
       encrypted,
       context.ipfsClient,
       context.uploadRetries,
-      context.signal
+      context.signal,
     );
 
     // Track
@@ -818,7 +842,7 @@ class IncrementalManifestBuilder {
     private manifestKey: SymmetricKey,
     private ipfsClient: IpfsClient,
     private context: ProcessingContext,
-    private threshold: number = SUB_MANIFEST_SIZE
+    private threshold: number = SUB_MANIFEST_SIZE,
   ) {}
 
   /**
@@ -826,7 +850,8 @@ class IncrementalManifestBuilder {
    */
   private estimateSize(fileInfo: FileInfo): number {
     // Rough estimate: fixed fields + path + name + chunks
-    return 100 + fileInfo.path.length + fileInfo.name.length + fileInfo.chunks.length * 120;
+    return 100 + fileInfo.path.length + fileInfo.name.length +
+      fileInfo.chunks.length * 120;
   }
 
   /**
@@ -837,7 +862,10 @@ class IncrementalManifestBuilder {
     const estimatedSize = this.estimateSize(fileInfo);
 
     // Check if adding this file would exceed threshold
-    if (this.pendingSize + estimatedSize > this.threshold && this.pendingFiles.length > 0) {
+    if (
+      this.pendingSize + estimatedSize > this.threshold &&
+      this.pendingFiles.length > 0
+    ) {
       await this.flushSubManifest();
     }
 
@@ -865,7 +893,10 @@ class IncrementalManifestBuilder {
     const serialized = encodeSubManifest(subManifestData);
 
     // Encrypt with sub-manifest domain
-    const fileKey = await deriveFileKey(this.manifestKey, new Uint8Array(32) as ContentHash);
+    const fileKey = await deriveFileKey(
+      this.manifestKey,
+      new Uint8Array(32) as ContentHash,
+    );
     // Note: Sub-manifests use a different encryption context, but for simplicity we use same pattern
     const { nonce, ciphertext } = await encrypt(serialized, this.manifestKey);
     const encrypted = new Uint8Array(NONCE_SIZE + ciphertext.length);
@@ -879,7 +910,7 @@ class IncrementalManifestBuilder {
       encrypted,
       this.ipfsClient,
       this.context.uploadRetries,
-      this.context.signal
+      this.context.signal,
     );
 
     const flushed: FlushedSubManifest = {
@@ -932,10 +963,13 @@ class IncrementalManifestBuilder {
  * Build the final CAR with directory structure linking to already-uploaded chunks.
  */
 async function buildFinalCar(
-  chunkCidMap: Map<string, { chunkId: ChunkId; cid: string; encryptedSize: number }>,
+  chunkCidMap: Map<
+    string,
+    { chunkId: ChunkId; cid: string; encryptedSize: number }
+  >,
   manifest: Uint8Array,
   subManifests: Uint8Array[],
-  uploadedSubManifestCids: string[]
+  uploadedSubManifestCids: string[],
 ): Promise<{
   carBytes: Uint8Array;
   rootCid: string;
@@ -963,7 +997,7 @@ async function buildFinalCar(
 
   for (const [chunkId, info] of chunkCidMap) {
     const path = chunkIdToPath(chunkId as ChunkId);
-    const parts = path.split('/'); // ["6B", "v7", "6Bv7..."]
+    const parts = path.split("/"); // ["6B", "v7", "6Bv7..."]
 
     // Navigate to level-1
     const level1Name = parts[0]!;
@@ -995,7 +1029,7 @@ async function buildFinalCar(
   }
 
   async function createDirNode(
-    links: Array<{ name: string; cid: CID; tsize: number }>
+    links: Array<{ name: string; cid: CID; tsize: number }>,
   ): Promise<{ bytes: Uint8Array; cid: CID }> {
     const sortedLinks = [...links].sort((a, b) => byteCompare(a.name, b.name));
     const pbLinks = sortedLinks.map((link) => ({
@@ -1055,7 +1089,7 @@ async function buildFinalCar(
 
   // Add manifest link
   rootLinks.push({
-    name: 'm',
+    name: "m",
     cid: manifestCid,
     tsize: manifest.length,
   });
@@ -1139,13 +1173,13 @@ async function buildFinalCar(
 export async function uploadBatch(
   files: AsyncIterable<StreamingFileInput>,
   options: UploadOptions,
-  ipfsClient: IpfsClient
+  ipfsClient: IpfsClient,
 ): Promise<BatchResult> {
   const { signal, onProgress, onChunkUploaded, onSubManifestFlushed } = options;
 
   // === VALIDATION ===
   if (options.recipients.length === 0) {
-    throw new ValidationError('At least one recipient is required');
+    throw new ValidationError("At least one recipient is required");
   }
 
   // === INITIALIZE STATE ===
@@ -1187,8 +1221,16 @@ export async function uploadBatch(
 
   const pathManager = new PathManager();
   const dirBuilder = new DirectoryTreeBuilder(created, options.directories);
-  const aggregationBuffer = new AggregationBufferManager(manifestKey, ipfsClient, context);
-  const manifestBuilder = new IncrementalManifestBuilder(manifestKey, ipfsClient, context);
+  const aggregationBuffer = new AggregationBufferManager(
+    manifestKey,
+    ipfsClient,
+    context,
+  );
+  const manifestBuilder = new IncrementalManifestBuilder(
+    manifestKey,
+    ipfsClient,
+    context,
+  );
 
   // Helper to update ChunkRefs for files in a flushed chunk
   function updateChunkRefsForFlushedChunk(flushedChunk: UploadedChunk | null) {
@@ -1232,7 +1274,7 @@ export async function uploadBatch(
 
     // Report progress (totalFiles and totalBytes are undefined for true streaming)
     onProgress?.({
-      phase: 'processing',
+      phase: "processing",
       filesProcessed: context.filesProcessed,
       totalFiles: undefined,
       bytesProcessed: context.bytesProcessed,
@@ -1274,14 +1316,16 @@ export async function uploadBatch(
         file.size,
         0,
         file.contentHash,
-        file.getStream
+        file.getStream,
       );
 
       // Build ChunkRef from buffer state
       // We need to track which chunk this file ended up in
       if (flushedChunk) {
         // File was part of flushed chunk
-        const segInfo = flushedChunk.segments.find((s) => s.fileIndex === fileIndex);
+        const segInfo = flushedChunk.segments.find((s) =>
+          s.fileIndex === fileIndex
+        );
         if (segInfo) {
           chunkRefs.push({
             chunkId: flushedChunk.chunkId,
@@ -1319,7 +1363,7 @@ export async function uploadBatch(
 
   // Check for empty batch (after streaming through all files)
   if (!hasFiles) {
-    throw new ValidationError('Cannot upload empty batch');
+    throw new ValidationError("Cannot upload empty batch");
   }
 
   // Build final directories (after all files processed)
@@ -1327,7 +1371,7 @@ export async function uploadBatch(
 
   // === FINAL FLUSH ===
   onProgress?.({
-    phase: 'finalizing',
+    phase: "finalizing",
     filesProcessed: context.filesProcessed,
     totalFiles: context.filesProcessed, // Now known after streaming
     bytesProcessed: context.bytesProcessed,
@@ -1377,7 +1421,7 @@ export async function uploadBatch(
     chunkCidMap,
     envelope,
     encryptedSubManifests,
-    context.uploadedSubManifests.map((sm) => sm.cid)
+    context.uploadedSubManifests.map((sm) => sm.cid),
   );
 
   checkAbort(signal);
@@ -1403,7 +1447,7 @@ export async function uploadBatch(
     manifest: batchManifest,
     totalSize: Array.from(context.uploadedChunks.values()).reduce(
       (sum, c) => sum + c.encryptedSize,
-      0
+      0,
     ) + finalCarResult.carBytes.length,
     chunkCount: context.uploadedChunks.size,
     manifestCount: 1 + encryptedSubManifests.length,

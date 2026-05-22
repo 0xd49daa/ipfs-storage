@@ -5,29 +5,29 @@
  */
 
 import {
-  decrypt,
-  unwrapKeyAuthenticated,
   constantTimeEqual,
-  type SymmetricKey,
-  type X25519PublicKey,
+  decrypt,
   type Nonce,
-} from '@0xd49daa/safecrypt';
+  type SymmetricKey,
+  unwrapKeyAuthenticated,
+  type X25519PublicKey,
+} from "@0xd49daa/safecrypt";
 
-import { MANIFEST_DOMAIN, NONCE_SIZE } from './constants.ts';
-import { ManifestError, ValidationError } from './errors.ts';
+import { MANIFEST_DOMAIN, NONCE_SIZE } from "./constants.ts";
+import { ManifestError, ValidationError } from "./errors.ts";
 import {
   decodeManifestEnvelope,
   decodeRootManifest,
   decodeSubManifest,
-} from './serialization.ts';
-import type { IpfsClient } from './ipfs-client.ts';
+} from "./serialization.ts";
+import type { IpfsClient } from "./ipfs-client.ts";
 import type {
   BatchManifest,
-  RecipientKeyInfo,
   FileInfo,
-  SubManifestIndexEntry,
   GetManifestOptions,
-} from './types.ts';
+  RecipientKeyInfo,
+  SubManifestIndexEntry,
+} from "./types.ts";
 
 /**
  * Check if abort signal is triggered and throw AbortError if so.
@@ -37,8 +37,8 @@ function checkAbort(signal?: AbortSignal): void {
     throw new DOMException(
       signal.reason instanceof Error
         ? signal.reason.message
-        : String(signal.reason ?? 'Aborted'),
-      'AbortError'
+        : String(signal.reason ?? "Aborted"),
+      "AbortError",
     );
   }
 }
@@ -53,7 +53,7 @@ function checkAbort(signal?: AbortSignal): void {
  */
 async function collectBytes(
   iterable: AsyncIterable<Uint8Array>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of iterable) {
@@ -78,12 +78,12 @@ async function collectBytes(
  */
 async function findMatchingRecipient(
   recipients: RecipientKeyInfo[],
-  recipientPublicKey: X25519PublicKey
+  recipientPublicKey: X25519PublicKey,
 ): Promise<RecipientKeyInfo | null> {
   for (const recipient of recipients) {
     const isMatch = await constantTimeEqual(
       recipient.recipientPublicKey,
-      recipientPublicKey
+      recipientPublicKey,
     );
     if (isMatch) {
       return recipient;
@@ -107,12 +107,12 @@ async function decryptManifestBytes(
   encryptedManifest: Uint8Array,
   manifestKey: SymmetricKey,
   domain: string,
-  batchCid: string
+  batchCid: string,
 ): Promise<Uint8Array> {
   if (encryptedManifest.length < NONCE_SIZE) {
     throw new ManifestError(
       batchCid,
-      `Encrypted manifest too short: expected at least ${NONCE_SIZE} bytes, got ${encryptedManifest.length}`
+      `Encrypted manifest too short: expected at least ${NONCE_SIZE} bytes, got ${encryptedManifest.length}`,
     );
   }
 
@@ -124,12 +124,14 @@ async function decryptManifestBytes(
   try {
     return await decrypt(ciphertext, nonce, manifestKey, context);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to decrypt manifest: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to decrypt manifest: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }
@@ -149,7 +151,7 @@ async function fetchAndDecryptSubManifest(
   manifestId: string,
   manifestKey: SymmetricKey,
   ipfsClient: IpfsClient,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<FileInfo[]> {
   checkAbort(signal);
 
@@ -158,15 +160,17 @@ async function fetchAndDecryptSubManifest(
   try {
     encryptedBytes = await collectBytes(
       ipfsClient.cat(batchCid, `/${manifestId}`),
-      signal
+      signal,
     );
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to fetch sub-manifest ${manifestId}: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to fetch sub-manifest ${manifestId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -177,10 +181,10 @@ async function fetchAndDecryptSubManifest(
       encryptedBytes,
       manifestKey,
       MANIFEST_DOMAIN.SUB,
-      batchCid
+      batchCid,
     );
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     // Re-throw ManifestError as-is to avoid nested "Manifest error..." prefixes
@@ -189,7 +193,9 @@ async function fetchAndDecryptSubManifest(
     }
     throw new ManifestError(
       batchCid,
-      `Failed to decrypt sub-manifest ${manifestId}: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to decrypt sub-manifest ${manifestId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -198,12 +204,14 @@ async function fetchAndDecryptSubManifest(
     const subManifest = decodeSubManifest(decryptedBytes);
     return subManifest.files;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to parse sub-manifest ${manifestId}: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to parse sub-manifest ${manifestId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }
@@ -220,14 +228,14 @@ async function fetchAndDecryptSubManifest(
  */
 export async function getManifest(
   batchCid: string,
-  options: GetManifestOptions
+  options: GetManifestOptions,
 ): Promise<BatchManifest> {
   const { ipfsClient, recipientKeyPair, expectedSenderPublicKey, signal } =
     options;
 
   // 1. Validate inputs
-  if (!batchCid || typeof batchCid !== 'string' || batchCid.trim() === '') {
-    throw new ValidationError('batchCid must be a non-empty string');
+  if (!batchCid || typeof batchCid !== "string" || batchCid.trim() === "") {
+    throw new ValidationError("batchCid must be a non-empty string");
   }
 
   // 2. Check abort signal
@@ -236,14 +244,16 @@ export async function getManifest(
   // 3. Fetch manifest envelope
   let envelopeBytes: Uint8Array;
   try {
-    envelopeBytes = await collectBytes(ipfsClient.cat(batchCid, '/m'), signal);
+    envelopeBytes = await collectBytes(ipfsClient.cat(batchCid, "/m"), signal);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to fetch manifest: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to fetch manifest: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -252,34 +262,36 @@ export async function getManifest(
   try {
     envelope = decodeManifestEnvelope(envelopeBytes);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to parse manifest envelope: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to parse manifest envelope: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
   // 5. Find matching recipient
   const matchingRecipient = await findMatchingRecipient(
     envelope.recipients,
-    recipientKeyPair.publicKey
+    recipientKeyPair.publicKey,
   );
   if (!matchingRecipient) {
     throw new ManifestError(
       batchCid,
-      'No matching recipient found for provided key'
+      "No matching recipient found for provided key",
     );
   }
 
   // 6. Verify sender key matches expected
   const senderMatches = await constantTimeEqual(
     matchingRecipient.senderPublicKey,
-    expectedSenderPublicKey
+    expectedSenderPublicKey,
   );
   if (!senderMatches) {
-    throw new ManifestError(batchCid, 'Sender public key mismatch');
+    throw new ManifestError(batchCid, "Sender public key mismatch");
   }
 
   // 7. Unwrap manifest key
@@ -292,15 +304,17 @@ export async function getManifest(
         senderPublicKey: matchingRecipient.senderPublicKey,
       },
       expectedSenderPublicKey,
-      recipientKeyPair
+      recipientKeyPair,
     );
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to unwrap manifest key: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to unwrap manifest key: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -309,7 +323,7 @@ export async function getManifest(
     envelope.encryptedManifest,
     manifestKey,
     MANIFEST_DOMAIN.ROOT,
-    batchCid
+    batchCid,
   );
 
   // 9. Parse root manifest
@@ -317,12 +331,14 @@ export async function getManifest(
   try {
     rootManifest = decodeRootManifest(decryptedRootBytes);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to parse root manifest: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to parse root manifest: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -338,7 +354,7 @@ export async function getManifest(
       subManifestEntry.manifestId,
       manifestKey,
       ipfsClient,
-      signal
+      signal,
     );
     allFiles.push(...subManifestFiles);
   }

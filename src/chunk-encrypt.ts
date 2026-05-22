@@ -5,16 +5,16 @@
  * Used by download.ts for decrypting file data.
  */
 
-import type { SymmetricKey, Nonce } from '@0xd49daa/safecrypt';
-import { decrypt, createDecryptStream } from '@0xd49daa/safecrypt';
-import { ChunkEncryption } from './gen/manifest_pb.ts';
+import type { Nonce, SymmetricKey } from "@0xd49daa/safecrypt";
+import { createDecryptStream, decrypt } from "@0xd49daa/safecrypt";
+import { ChunkEncryption } from "./gen/manifest_pb.ts";
 import {
   NONCE_SIZE,
   SINGLE_SHOT_OVERHEAD,
-  STREAM_HEADER_SIZE,
   STREAM_CHUNK_OVERHEAD,
   STREAM_CHUNK_SIZE,
-} from './constants.ts';
+  STREAM_HEADER_SIZE,
+} from "./constants.ts";
 
 // ============================================================================
 // Utility Functions
@@ -38,7 +38,7 @@ import {
  */
 export function computeEncryptedLength(
   plaintextLength: number,
-  encryption: ChunkEncryption
+  encryption: ChunkEncryption,
 ): number {
   if (encryption === ChunkEncryption.SINGLE_SHOT) {
     return plaintextLength + SINGLE_SHOT_OVERHEAD;
@@ -46,7 +46,8 @@ export function computeEncryptedLength(
     // STREAMING: header + (numChunks * overhead)
     // Uses locked STREAM_CHUNK_SIZE constant - not configurable
     const numChunks = Math.ceil(plaintextLength / STREAM_CHUNK_SIZE);
-    return plaintextLength + STREAM_HEADER_SIZE + numChunks * STREAM_CHUNK_OVERHEAD;
+    return plaintextLength + STREAM_HEADER_SIZE +
+      numChunks * STREAM_CHUNK_OVERHEAD;
   }
 }
 
@@ -60,7 +61,7 @@ export function computeEncryptedLength(
  */
 export async function decryptSingleShot(
   encryptedData: Uint8Array,
-  key: SymmetricKey
+  key: SymmetricKey,
 ): Promise<Uint8Array> {
   const nonce = encryptedData.subarray(0, NONCE_SIZE) as Nonce;
   const ciphertext = encryptedData.subarray(NONCE_SIZE);
@@ -82,12 +83,12 @@ export async function decryptSingleShot(
  */
 export async function decryptStreaming(
   encryptedData: Uint8Array,
-  key: SymmetricKey
+  key: SymmetricKey,
 ): Promise<Uint8Array> {
   const header = encryptedData.subarray(0, STREAM_HEADER_SIZE);
   const stream = await createDecryptStream(
     key,
-    header as unknown as import('@0xd49daa/safecrypt').SecretstreamHeader
+    header as unknown as import("@0xd49daa/safecrypt").SecretstreamHeader,
   );
 
   try {
@@ -102,7 +103,10 @@ export async function decryptStreaming(
       const remaining = encryptedBody.length - readOffset;
       const encChunkLen = Math.min(chunkSize, remaining);
 
-      const encChunk = encryptedBody.subarray(readOffset, readOffset + encChunkLen);
+      const encChunk = encryptedBody.subarray(
+        readOffset,
+        readOffset + encChunkLen,
+      );
       const { plaintext, isFinal } = stream.pull(encChunk);
       chunks.push(plaintext);
 

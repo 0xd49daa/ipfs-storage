@@ -3,13 +3,13 @@
  * Provides interface for IPFS operations and in-memory mock for testing.
  */
 
-import { CID } from 'multiformats/cid';
-import { sha256 } from 'multiformats/hashes/sha2';
-import * as raw from 'multiformats/codecs/raw';
-import * as dagPb from '@ipld/dag-pb';
-import { CarBufferReader } from '@ipld/car';
-import { decode as decodeUnixFS, NodeType } from '@ipld/unixfs';
-import { IpfsStorageError } from './errors.ts';
+import { CID } from "multiformats/cid";
+import { sha256 } from "multiformats/hashes/sha2";
+import * as raw from "multiformats/codecs/raw";
+import * as dagPb from "@ipld/dag-pb";
+import { CarBufferReader } from "@ipld/car";
+import { decode as decodeUnixFS, NodeType } from "@ipld/unixfs";
+import { IpfsStorageError } from "./errors.ts";
 
 // Local type definitions for UnixFS nodes (not exported from @ipld/unixfs)
 // These match the shapes returned by decode()
@@ -21,21 +21,21 @@ interface UnixFSMetadata {
 
 interface SimpleFile {
   readonly type: typeof NodeType.File;
-  readonly layout: 'simple';
+  readonly layout: "simple";
   readonly content: Uint8Array;
   readonly metadata?: UnixFSMetadata;
 }
 
 interface AdvancedFile {
   readonly type: typeof NodeType.File;
-  readonly layout: 'advanced';
+  readonly layout: "advanced";
   readonly parts: ReadonlyArray<FileLink>;
   readonly metadata?: UnixFSMetadata;
 }
 
 interface ComplexFile {
   readonly type: typeof NodeType.File;
-  readonly layout: 'complex';
+  readonly layout: "complex";
   readonly content: Uint8Array;
   readonly parts: ReadonlyArray<FileLink>;
   readonly metadata?: UnixFSMetadata;
@@ -120,7 +120,7 @@ export interface IpfsClient {
 export class IpfsUploadError extends IpfsStorageError {
   constructor(message: string, cause?: Error) {
     super(`IPFS upload failed: ${message}`);
-    this.name = 'IpfsUploadError';
+    this.name = "IpfsUploadError";
     if (cause) {
       this.cause = cause;
     }
@@ -135,8 +135,8 @@ export class IpfsFetchError extends IpfsStorageError {
   readonly path?: string;
 
   constructor(cid: string, message: string, path?: string) {
-    super(`IPFS fetch failed for ${cid}${path ? path : ''}: ${message}`);
-    this.name = 'IpfsFetchError';
+    super(`IPFS fetch failed for ${cid}${path ? path : ""}: ${message}`);
+    this.name = "IpfsFetchError";
     this.cid = cid;
     this.path = path;
   }
@@ -258,13 +258,13 @@ export class MockIpfsClient implements IpfsClient {
     // Check for simulated failure (single shot)
     if (this.failNextUpload) {
       this.failNextUpload = false;
-      throw new IpfsUploadError('Simulated upload failure');
+      throw new IpfsUploadError("Simulated upload failure");
     }
 
     // Check for simulated failure (countdown for retry testing)
     if (this.failUploadCount > 0) {
       this.failUploadCount--;
-      throw new IpfsUploadError('Simulated transient upload failure');
+      throw new IpfsUploadError("Simulated transient upload failure");
     }
 
     // Parse CAR file
@@ -273,8 +273,8 @@ export class MockIpfsClient implements IpfsClient {
       reader = CarBufferReader.fromBytes(carBytes);
     } catch (error) {
       throw new IpfsUploadError(
-        'Failed to parse CAR file',
-        error instanceof Error ? error : undefined
+        "Failed to parse CAR file",
+        error instanceof Error ? error : undefined,
       );
     }
 
@@ -307,7 +307,7 @@ export class MockIpfsClient implements IpfsClient {
 
     // Return first root CID if present, empty string for headless CARs
     const firstRoot = roots[0];
-    return firstRoot ? firstRoot.toString() : '';
+    return firstRoot ? firstRoot.toString() : "";
   }
 
   /**
@@ -319,11 +319,11 @@ export class MockIpfsClient implements IpfsClient {
       await this.catLatch();
     }
 
-    if (!path || path === '' || path === '/') {
+    if (!path || path === "" || path === "/") {
       // Direct block retrieval
       const bytes = this.blocks.get(cid);
       if (!bytes) {
-        throw new IpfsFetchError(cid, 'Block not found');
+        throw new IpfsFetchError(cid, "Block not found");
       }
       yield bytes;
       return;
@@ -373,6 +373,17 @@ export class MockIpfsClient implements IpfsClient {
    */
   getBlock(cid: string): Uint8Array | undefined {
     return this.blocks.get(cid);
+  }
+
+  /**
+   * Store a precomputed block directly. Used by Kubo RPC test doubles for
+   * /api/v0/block/put compatibility.
+   */
+  putBlock(cid: string, bytes: Uint8Array, root = false): void {
+    this.blocks.set(cid, bytes);
+    if (root) {
+      this.roots.add(cid);
+    }
   }
 
   /**
@@ -432,9 +443,12 @@ export class MockIpfsClient implements IpfsClient {
   /**
    * Resolve a path within a UnixFS directory structure.
    */
-  private async resolvePath(rootCid: string, path: string): Promise<Uint8Array> {
+  private async resolvePath(
+    rootCid: string,
+    path: string,
+  ): Promise<Uint8Array> {
     // Split path into segments: "/a/b/c" -> ["a", "b", "c"]
-    const segments = path.split('/').filter((s) => s.length > 0);
+    const segments = path.split("/").filter((s) => s.length > 0);
 
     let currentCid = parseCid(rootCid);
 
@@ -444,7 +458,7 @@ export class MockIpfsClient implements IpfsClient {
         throw new IpfsFetchError(
           currentCid.toString(),
           `Block not found while resolving path`,
-          path
+          path,
         );
       }
 
@@ -459,7 +473,7 @@ export class MockIpfsClient implements IpfsClient {
           throw new IpfsFetchError(
             rootCid,
             `Path segment not found: ${segment}`,
-            path
+            path,
           );
         }
 
@@ -469,7 +483,7 @@ export class MockIpfsClient implements IpfsClient {
         throw new IpfsFetchError(
           rootCid,
           `Cannot traverse non-directory node at segment: ${segment}`,
-          path
+          path,
         );
       }
     }
@@ -479,8 +493,8 @@ export class MockIpfsClient implements IpfsClient {
     if (!finalBytes) {
       throw new IpfsFetchError(
         currentCid.toString(),
-        'Final block not found',
-        path
+        "Final block not found",
+        path,
       );
     }
 
@@ -504,7 +518,7 @@ export class MockIpfsClient implements IpfsClient {
     bytes: Uint8Array,
     cid: CID,
     rootCid?: string,
-    path?: string
+    path?: string,
   ): Uint8Array {
     // If raw codec (0x55), return bytes directly
     if (cid.code === raw.code) {
@@ -527,13 +541,17 @@ export class MockIpfsClient implements IpfsClient {
         if (pbNode.Links && pbNode.Links.length > 0) {
           // This is likely an AdvancedFile (file with data only in links)
           // The decode() bug occurs when UnixFS Data field has no inline bytes
-          return this.extractAdvancedFileContent(pbNode, rootCid ?? cid.toString(), path);
+          return this.extractAdvancedFileContent(
+            pbNode,
+            rootCid ?? cid.toString(),
+            path,
+          );
         }
         // Re-throw if we can't handle it
         throw new IpfsFetchError(
           rootCid ?? cid.toString(),
-          'Failed to decode UnixFS node',
-          path
+          "Failed to decode UnixFS node",
+          path,
         );
       }
 
@@ -542,7 +560,7 @@ export class MockIpfsClient implements IpfsClient {
           return this.extractFileContent(
             node as SimpleFile | AdvancedFile | ComplexFile,
             rootCid ?? cid.toString(),
-            path
+            path,
           );
         case NodeType.Raw:
           return (node as Raw).content;
@@ -569,7 +587,7 @@ export class MockIpfsClient implements IpfsClient {
   private extractAdvancedFileContent(
     pbNode: dagPb.PBNode,
     rootCid: string,
-    path?: string
+    path?: string,
   ): Uint8Array {
     const chunks: Uint8Array[] = [];
 
@@ -581,7 +599,7 @@ export class MockIpfsClient implements IpfsClient {
         throw new IpfsFetchError(
           rootCid,
           `Linked block not found: ${linkCid.toString()}`,
-          path
+          path,
         );
       }
       // Recursively extract content from linked block
@@ -612,18 +630,18 @@ export class MockIpfsClient implements IpfsClient {
   private extractFileContent(
     node: SimpleFile | AdvancedFile | ComplexFile,
     rootCid: string,
-    path?: string
+    path?: string,
   ): Uint8Array {
     const chunks: Uint8Array[] = [];
 
     // Inline content first (simple/complex layouts have 'content' property)
     // Handle undefined/null content gracefully
-    if ('content' in node && node.content && node.content.length > 0) {
+    if ("content" in node && node.content && node.content.length > 0) {
       chunks.push(node.content);
     }
 
     // Follow parts links (advanced/complex layouts have 'parts' property)
-    if ('parts' in node && node.parts && node.parts.length > 0) {
+    if ("parts" in node && node.parts && node.parts.length > 0) {
       for (const part of node.parts) {
         const linkCid = part.cid;
         const linkBytes = this.blocks.get(linkCid.toString());
@@ -631,11 +649,16 @@ export class MockIpfsClient implements IpfsClient {
           throw new IpfsFetchError(
             rootCid,
             `Linked block not found: ${linkCid.toString()}`,
-            path
+            path,
           );
         }
         // Recursively extract content from linked block
-        const content = this.extractContent(linkBytes, linkCid as CID, rootCid, path);
+        const content = this.extractContent(
+          linkBytes,
+          linkCid as CID,
+          rootCid,
+          path,
+        );
         chunks.push(content);
       }
     }

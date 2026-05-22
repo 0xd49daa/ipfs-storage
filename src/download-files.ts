@@ -9,18 +9,15 @@
  * maintain error detection semantics.
  */
 
-import type { IpfsClient } from './ipfs-client.ts';
+import type { IpfsClient } from "./ipfs-client.ts";
 import type {
-  FileDownloadRef,
-  DownloadFilesOptions,
   DownloadedFile,
-} from './types.ts';
-import { downloadFile } from './download.ts';
-import { ValidationError } from './errors.ts';
-import {
-  DEFAULT_RETRIES,
-  DEFAULT_CHUNK_CONCURRENCY,
-} from './constants.ts';
+  DownloadFilesOptions,
+  FileDownloadRef,
+} from "./types.ts";
+import { downloadFile } from "./download.ts";
+import { ValidationError } from "./errors.ts";
+import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
 
 // ============================================================================
 // Helper Functions
@@ -34,8 +31,8 @@ function checkAbort(signal?: AbortSignal): void {
     throw new DOMException(
       signal.reason instanceof Error
         ? signal.reason.message
-        : String(signal.reason ?? 'Download aborted'),
-      'AbortError'
+        : String(signal.reason ?? "Download aborted"),
+      "AbortError",
     );
   }
 }
@@ -44,7 +41,7 @@ function checkAbort(signal?: AbortSignal): void {
  * Collect async iterable bytes into a single Uint8Array.
  */
 async function collectBytes(
-  iterable: AsyncIterable<Uint8Array>
+  iterable: AsyncIterable<Uint8Array>,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of iterable) {
@@ -64,11 +61,14 @@ async function collectBytes(
  * Create an async iterable that yields a Uint8Array in chunks.
  */
 async function* yieldInChunks(
-  content: Uint8Array
+  content: Uint8Array,
 ): AsyncIterable<Uint8Array> {
   const YIELD_CHUNK_SIZE = 64 * 1024; // 64KB chunks
   for (let offset = 0; offset < content.length; offset += YIELD_CHUNK_SIZE) {
-    yield content.subarray(offset, Math.min(offset + YIELD_CHUNK_SIZE, content.length));
+    yield content.subarray(
+      offset,
+      Math.min(offset + YIELD_CHUNK_SIZE, content.length),
+    );
   }
 }
 
@@ -97,7 +97,7 @@ async function* yieldInChunks(
 export async function* downloadFiles(
   refs: FileDownloadRef[],
   options: DownloadFilesOptions | undefined,
-  ipfsClient: IpfsClient
+  ipfsClient: IpfsClient,
 ): AsyncIterable<DownloadedFile> {
   // Extract options with defaults
   const {
@@ -107,7 +107,7 @@ export async function* downloadFiles(
     signal,
     onProgress,
     onError,
-    integrityMode = 'strict',
+    integrityMode = "strict",
     onIntegrityError,
   } = options ?? {};
 
@@ -116,13 +116,13 @@ export async function* downloadFiles(
 
   // Validate inputs
   if (refs.length === 0) {
-    throw new ValidationError('refs array must not be empty');
+    throw new ValidationError("refs array must not be empty");
   }
   if (concurrency < 1) {
-    throw new ValidationError('concurrency must be at least 1');
+    throw new ValidationError("concurrency must be at least 1");
   }
   if (chunkConcurrency < 1) {
-    throw new ValidationError('chunkConcurrency must be at least 1');
+    throw new ValidationError("chunkConcurrency must be at least 1");
   }
 
   // Calculate total bytes for progress
@@ -177,7 +177,7 @@ export async function* downloadFiles(
             }
           },
         },
-        ipfsClient
+        ipfsClient,
       );
 
       // Collect file content (one file at a time to bound memory)
@@ -190,8 +190,9 @@ export async function* downloadFiles(
         totalFiles,
         bytesDownloaded,
         totalBytes,
-        currentFile:
-          fileIndex + 1 < totalFiles ? refs[fileIndex + 1]?.path : undefined,
+        currentFile: fileIndex + 1 < totalFiles
+          ? refs[fileIndex + 1]?.path
+          : undefined,
       });
 
       // Yield the completed file
@@ -212,8 +213,9 @@ export async function* downloadFiles(
           totalFiles,
           bytesDownloaded,
           totalBytes,
-          currentFile:
-            fileIndex + 1 < totalFiles ? refs[fileIndex + 1]?.path : undefined,
+          currentFile: fileIndex + 1 < totalFiles
+            ? refs[fileIndex + 1]?.path
+            : undefined,
         });
       } else {
         // Fail fast - throw immediately

@@ -7,28 +7,28 @@
 import {
   encrypt,
   generateKey,
-  wrapKeyAuthenticatedMulti,
   type SymmetricKey,
+  wrapKeyAuthenticatedMulti,
   type X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+} from "@0xd49daa/safecrypt";
 
-import { SUB_MANIFEST_SIZE, MANIFEST_DOMAIN } from './constants.ts';
-import { ValidationError } from './errors.ts';
+import { MANIFEST_DOMAIN, SUB_MANIFEST_SIZE } from "./constants.ts";
+import { ValidationError } from "./errors.ts";
 import {
+  encodeManifestEnvelope,
   encodeRootManifest,
   encodeSubManifest,
-  encodeManifestEnvelope,
-} from './serialization.ts';
+} from "./serialization.ts";
 import type {
-  FileInfo,
   DirectoryInfo,
-  SubManifestIndexEntry,
-  RecipientKeyInfo,
+  FileInfo,
+  ManifestEnvelopeData,
   RecipientInfo,
+  RecipientKeyInfo,
   RootManifestData,
   SubManifestData,
-  ManifestEnvelopeData,
-} from './types.ts';
+  SubManifestIndexEntry,
+} from "./types.ts";
 
 // ============================================================================
 // Types
@@ -229,7 +229,7 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
   // Validate maxSubManifestSize
   if (maxSize <= 0) {
     throw new ValidationError(
-      `maxSubManifestSize must be positive, got ${maxSize}`
+      `maxSubManifestSize must be positive, got ${maxSize}`,
     );
   }
 
@@ -259,7 +259,9 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
   const { groups, index } = splitFilesIntoGroups(sortedFiles, maxSize);
 
   // Build sub-manifests
-  const subManifests = groups.map((group) => encodeSubManifest({ files: group }));
+  const subManifests = groups.map((group) =>
+    encodeSubManifest({ files: group })
+  );
 
   // Build root manifest (directories only, files are in sub-manifests)
   const rootManifest: RootManifestData = {
@@ -287,7 +289,9 @@ function combineNonceAndCiphertext(encrypted: {
   nonce: Uint8Array;
   ciphertext: Uint8Array;
 }): Uint8Array {
-  const combined = new Uint8Array(encrypted.nonce.length + encrypted.ciphertext.length);
+  const combined = new Uint8Array(
+    encrypted.nonce.length + encrypted.ciphertext.length,
+  );
   combined.set(encrypted.nonce, 0);
   combined.set(encrypted.ciphertext, encrypted.nonce.length);
   return combined;
@@ -304,13 +308,13 @@ function combineNonceAndCiphertext(encrypted: {
  * @throws ValidationError if recipients array is empty
  */
 export async function encryptManifest(
-  input: EncryptManifestInput
+  input: EncryptManifestInput,
 ): Promise<EncryptedManifestResult> {
   const { manifest, recipients, senderKeyPair } = input;
 
   // Validate recipients first - cannot wrap key for zero recipients
   if (recipients.length === 0) {
-    throw new ValidationError('At least one recipient is required');
+    throw new ValidationError("At least one recipient is required");
   }
 
   // Generate or use provided manifest key
@@ -318,7 +322,11 @@ export async function encryptManifest(
 
   // Encrypt root manifest with ROOT domain context
   const rootContext = new TextEncoder().encode(MANIFEST_DOMAIN.ROOT);
-  const encryptedRoot = await encrypt(manifest.rootManifest, manifestKey, rootContext);
+  const encryptedRoot = await encrypt(
+    manifest.rootManifest,
+    manifestKey,
+    rootContext,
+  );
 
   // Encrypt sub-manifests with SUB domain context
   const subContext = new TextEncoder().encode(MANIFEST_DOMAIN.SUB);
@@ -326,7 +334,7 @@ export async function encryptManifest(
     manifest.subManifests.map(async (subManifest) => {
       const encrypted = await encrypt(subManifest, manifestKey, subContext);
       return combineNonceAndCiphertext(encrypted);
-    })
+    }),
   );
 
   // Wrap manifest key for all recipients
@@ -334,11 +342,14 @@ export async function encryptManifest(
   const wrappedKeys = await wrapKeyAuthenticatedMulti(
     manifestKey,
     recipientPublicKeys,
-    senderKeyPair
+    senderKeyPair,
   );
 
   // Build recipient key info with labels
-  const recipientKeyInfos: RecipientKeyInfo[] = wrappedKeys.map((wrapped, i) => ({
+  const recipientKeyInfos: RecipientKeyInfo[] = wrappedKeys.map((
+    wrapped,
+    i,
+  ) => ({
     recipientPublicKey: recipients[i]!.publicKey,
     nonce: wrapped.nonce,
     ciphertext: wrapped.ciphertext,
@@ -369,7 +380,7 @@ export async function encryptManifest(
  * @throws ValidationError if recipients array is empty
  */
 export async function buildAndEncryptManifest(
-  input: BuildAndEncryptManifestInput
+  input: BuildAndEncryptManifestInput,
 ): Promise<EncryptedManifestResult> {
   const manifest = buildManifest({
     files: input.files,

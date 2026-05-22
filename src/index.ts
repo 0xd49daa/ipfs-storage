@@ -9,15 +9,15 @@
 // Module Factory (Primary Entry Point)
 // =============================================================================
 
-export { createIpfsStorageModule } from './module.ts';
+export { createIpfsStorageModule } from "./module.ts";
 
 // =============================================================================
 // IPFS Client Abstraction
 // =============================================================================
 
-export type { IpfsClient } from './ipfs-client.ts';
-export { MockIpfsClient } from './ipfs-client.ts';
-export type { MockIpfsClientOptions } from './ipfs-client.ts';
+export type { IpfsClient } from "./ipfs-client.ts";
+export { MockIpfsClient } from "./ipfs-client.ts";
+export type { MockIpfsClientOptions } from "./ipfs-client.ts";
 
 // =============================================================================
 // Configuration & Module Types
@@ -27,38 +27,38 @@ export type {
   IpfsStorageConfig,
   IpfsStorageModule,
   ReadOptions,
-} from './types.ts';
+} from "./types.ts";
 
 // =============================================================================
 // Upload Types
 // =============================================================================
 
 export type {
-  StreamingFileInput,
-  DirectoryInput,
-  RecipientInfo,
-  UploadOptions,
   BatchResult,
-  RenamedFile,
-  UploadProgress,
-  UploadProgressCallback,
   ChunkUploadedCallback,
   ChunkUploadedInfo,
+  DirectoryInput,
+  RecipientInfo,
+  RenamedFile,
+  StreamingFileInput,
   SubManifestFlushedCallback,
   SubManifestFlushedInfo,
-} from './types.ts';
+  UploadOptions,
+  UploadProgress,
+  UploadProgressCallback,
+} from "./types.ts";
 
 // =============================================================================
 // Standalone Upload Function
 // =============================================================================
 
-export { uploadBatch } from './streaming-upload.ts';
+export { uploadBatch } from "./streaming-upload.ts";
 
 // =============================================================================
 // Utility for Array to AsyncIterable Conversion
 // =============================================================================
 
-export { asAsyncIterable } from './async-iterable.ts';
+export { asAsyncIterable } from "./async-iterable.ts";
 
 // =============================================================================
 // Manifest Types
@@ -66,51 +66,51 @@ export { asAsyncIterable } from './async-iterable.ts';
 
 export type {
   BatchManifest,
-  FileInfo,
-  DirectoryInfo,
   ChunkRef,
-} from './types.ts';
+  DirectoryInfo,
+  FileInfo,
+} from "./types.ts";
 
-export { ChunkEncryption } from './types.ts';
+export { ChunkEncryption } from "./types.ts";
 
 // =============================================================================
 // Download Types
 // =============================================================================
 
 export type {
-  FileDownloadRef,
+  DownloadedFile,
+  DownloadErrorCallback,
+  DownloadFilesOptions,
   DownloadOptions,
   DownloadProgress,
   DownloadProgressCallback,
-  DownloadFilesOptions,
-  DownloadedFile,
+  FileDownloadRef,
   MultiDownloadProgress,
   MultiDownloadProgressCallback,
-  DownloadErrorCallback,
-} from './types.ts';
+} from "./types.ts";
 
 // =============================================================================
 // Error Classes
 // =============================================================================
 
 export {
-  IpfsStorageError,
-  ValidationError,
-  IntegrityError,
-  ManifestError,
   ChunkUnavailableError,
   ChunkUploadError,
   CidMismatchError,
-} from './errors.ts';
+  IntegrityError,
+  IpfsStorageError,
+  ManifestError,
+  ValidationError,
+} from "./errors.ts";
 
 // =============================================================================
 // Re-exported Encryption Types (for convenience)
 // =============================================================================
 
 export type {
-  SymmetricKey,
   ContentHash,
-  X25519PublicKey,
-  X25519PrivateKey,
+  SymmetricKey,
   X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+  X25519PrivateKey,
+  X25519PublicKey,
+} from "@0xd49daa/safecrypt";

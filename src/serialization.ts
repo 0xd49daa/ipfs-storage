@@ -1,37 +1,37 @@
-import { create, toBinary, fromBinary } from '@bufbuild/protobuf';
-import { asContentHash, SIZES } from '@0xd49daa/safecrypt';
-import type { X25519PublicKey, ContentHash } from '@0xd49daa/safecrypt';
-import { ValidationError } from './errors.ts';
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { asContentHash, SIZES } from "@0xd49daa/safecrypt";
+import type { ContentHash, X25519PublicKey } from "@0xd49daa/safecrypt";
+import { ValidationError } from "./errors.ts";
 
 import {
-  ManifestEnvelopeSchema,
-  RootManifestSchema,
-  SubManifestSchema,
-  RecipientKeySchema,
-  DirectoryRecordSchema,
-  FileRecordSchema,
-  FileChunkSchema,
-  SubManifestIndexSchema,
-  type ManifestEnvelope,
-  type RootManifest,
-  type SubManifest,
-  type RecipientKey,
   type DirectoryRecord,
-  type FileRecord,
+  DirectoryRecordSchema,
   type FileChunk,
+  FileChunkSchema,
+  type FileRecord,
+  FileRecordSchema,
+  type ManifestEnvelope,
+  ManifestEnvelopeSchema,
+  type RecipientKey,
+  RecipientKeySchema,
+  type RootManifest,
+  RootManifestSchema,
+  type SubManifest,
   type SubManifestIndex,
-} from './gen/manifest_pb.ts';
+  SubManifestIndexSchema,
+  SubManifestSchema,
+} from "./gen/manifest_pb.ts";
 
 import type {
-  ManifestEnvelopeData,
-  RootManifestData,
-  SubManifestData,
-  RecipientKeyInfo,
+  ChunkRef,
   DirectoryInfo,
   FileInfo,
-  ChunkRef,
+  ManifestEnvelopeData,
+  RecipientKeyInfo,
+  RootManifestData,
+  SubManifestData,
   SubManifestIndexEntry,
-} from './types.ts';
+} from "./types.ts";
 
 // ============================================================================
 // Local validation helpers
@@ -46,7 +46,7 @@ const WRAPPED_KEY_CIPHERTEXT_SIZE = 48;
 function validateX25519PublicKey(bytes: Uint8Array): X25519PublicKey {
   if (bytes.length !== SIZES.X25519_PUBLIC_KEY) {
     throw new ValidationError(
-      `Invalid X25519 public key: expected ${SIZES.X25519_PUBLIC_KEY} bytes, got ${bytes.length}`
+      `Invalid X25519 public key: expected ${SIZES.X25519_PUBLIC_KEY} bytes, got ${bytes.length}`,
     );
   }
   return bytes as X25519PublicKey;
@@ -55,7 +55,7 @@ function validateX25519PublicKey(bytes: Uint8Array): X25519PublicKey {
 function validateNonce(bytes: Uint8Array): Uint8Array {
   if (bytes.length !== NONCE_SIZE) {
     throw new ValidationError(
-      `Invalid nonce: expected ${NONCE_SIZE} bytes, got ${bytes.length}`
+      `Invalid nonce: expected ${NONCE_SIZE} bytes, got ${bytes.length}`,
     );
   }
   return bytes;
@@ -64,7 +64,7 @@ function validateNonce(bytes: Uint8Array): Uint8Array {
 function validateWrappedKeyCiphertext(bytes: Uint8Array): Uint8Array {
   if (bytes.length !== WRAPPED_KEY_CIPHERTEXT_SIZE) {
     throw new ValidationError(
-      `Invalid wrapped key ciphertext: expected ${WRAPPED_KEY_CIPHERTEXT_SIZE} bytes, got ${bytes.length}`
+      `Invalid wrapped key ciphertext: expected ${WRAPPED_KEY_CIPHERTEXT_SIZE} bytes, got ${bytes.length}`,
     );
   }
   return bytes;
@@ -76,12 +76,12 @@ function validateWrappedKeyCiphertext(bytes: Uint8Array): Uint8Array {
 function bigintToNumber(value: bigint, fieldName: string): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new ValidationError(
-      `${fieldName} value ${value} exceeds MAX_SAFE_INTEGER and cannot be safely converted to number`
+      `${fieldName} value ${value} exceeds MAX_SAFE_INTEGER and cannot be safely converted to number`,
     );
   }
   if (value < BigInt(Number.MIN_SAFE_INTEGER)) {
     throw new ValidationError(
-      `${fieldName} value ${value} is below MIN_SAFE_INTEGER and cannot be safely converted to number`
+      `${fieldName} value ${value} is below MIN_SAFE_INTEGER and cannot be safely converted to number`,
     );
   }
   return Number(value);
@@ -132,7 +132,9 @@ export function encodeSubManifest(data: SubManifestData): Uint8Array {
 /**
  * Decode binary protobuf to ManifestEnvelopeData.
  */
-export function decodeManifestEnvelope(bytes: Uint8Array): ManifestEnvelopeData {
+export function decodeManifestEnvelope(
+  bytes: Uint8Array,
+): ManifestEnvelopeData {
   const envelope = fromBinary(ManifestEnvelopeSchema, bytes);
   return {
     encryptedManifest: envelope.encryptedManifest,
@@ -149,7 +151,7 @@ export function decodeRootManifest(bytes: Uint8Array): RootManifestData {
     directories: manifest.directories.map(directoryProtoToInfo),
     files: manifest.files.map(fileProtoToInfo),
     subManifests: manifest.subManifests.map(subManifestIndexProtoToEntry),
-    created: bigintToNumber(manifest.created, 'created'),
+    created: bigintToNumber(manifest.created, "created"),
   };
 }
 
@@ -178,7 +180,7 @@ function recipientKeyInfoToProto(info: RecipientKeyInfo): RecipientKey {
     nonce: info.nonce,
     ciphertext: info.ciphertext,
     senderPublicKey: info.senderPublicKey,
-    label: info.label ?? '',
+    label: info.label ?? "",
   });
 }
 
@@ -212,7 +214,9 @@ function chunkRefToProto(ref: ChunkRef): FileChunk {
   });
 }
 
-function subManifestIndexToProto(entry: SubManifestIndexEntry): SubManifestIndex {
+function subManifestIndexToProto(
+  entry: SubManifestIndexEntry,
+): SubManifestIndex {
   return create(SubManifestIndexSchema, {
     manifestId: entry.manifestId,
     startPath: entry.startPath,
@@ -239,7 +243,7 @@ function directoryProtoToInfo(proto: DirectoryRecord): DirectoryInfo {
   return {
     path: proto.path,
     name: proto.name,
-    created: bigintToNumber(proto.created, 'directory.created'),
+    created: bigintToNumber(proto.created, "directory.created"),
   };
 }
 
@@ -247,10 +251,10 @@ function fileProtoToInfo(proto: FileRecord): FileInfo {
   return {
     path: proto.path,
     name: proto.name,
-    size: bigintToNumber(proto.size, 'file.size'),
+    size: bigintToNumber(proto.size, "file.size"),
     contentHash: asContentHash(proto.contentHash),
     chunks: proto.chunks.map(chunkProtoToRef),
-    created: bigintToNumber(proto.created, 'file.created'),
+    created: bigintToNumber(proto.created, "file.created"),
   };
 }
 
@@ -265,7 +269,9 @@ function chunkProtoToRef(proto: FileChunk): ChunkRef {
   };
 }
 
-function subManifestIndexProtoToEntry(proto: SubManifestIndex): SubManifestIndexEntry {
+function subManifestIndexProtoToEntry(
+  proto: SubManifestIndex,
+): SubManifestIndexEntry {
   return {
     manifestId: proto.manifestId,
     startPath: proto.startPath,

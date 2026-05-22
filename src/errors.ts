@@ -1,4 +1,4 @@
-import type { ContentHash } from '@0xd49daa/safecrypt';
+import type { ContentHash } from "@0xd49daa/safecrypt";
 
 /**
  * Base error class for all ipfs-storage errors.
@@ -6,7 +6,7 @@ import type { ContentHash } from '@0xd49daa/safecrypt';
 export class IpfsStorageError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'IpfsStorageError';
+    this.name = "IpfsStorageError";
   }
 }
 
@@ -17,7 +17,7 @@ export class IpfsStorageError extends Error {
 export class ValidationError extends IpfsStorageError {
   constructor(message: string) {
     super(message);
-    this.name = 'ValidationError';
+    this.name = "ValidationError";
   }
 }
 
@@ -32,7 +32,7 @@ export class IntegrityError extends IpfsStorageError {
 
   constructor(path: string, expected: ContentHash, actual: ContentHash) {
     super(`Integrity check failed for "${path}": content hash mismatch`);
-    this.name = 'IntegrityError';
+    this.name = "IntegrityError";
     this.path = path;
     this.expected = expected;
     this.actual = actual;
@@ -47,7 +47,7 @@ export class ManifestError extends IpfsStorageError {
 
   constructor(batchCid: string, message: string) {
     super(`Manifest error for batch ${batchCid}: ${message}`);
-    this.name = 'ManifestError';
+    this.name = "ManifestError";
     this.batchCid = batchCid;
   }
 }
@@ -61,7 +61,7 @@ export class ChunkUnavailableError extends IpfsStorageError {
 
   constructor(batchCid: string, chunkId: string, cause?: Error) {
     super(`Chunk unavailable: ${chunkId} in batch ${batchCid}`);
-    this.name = 'ChunkUnavailableError';
+    this.name = "ChunkUnavailableError";
     this.batchCid = batchCid;
     this.chunkId = chunkId;
     if (cause) {
@@ -78,14 +78,13 @@ export class ChunkUploadError extends IpfsStorageError {
 
   constructor(chunkCid: string, cause?: Error) {
     super(`Chunk upload failed after retries: ${chunkCid}`);
-    this.name = 'ChunkUploadError';
+    this.name = "ChunkUploadError";
     this.chunkCid = chunkCid;
     if (cause) {
       this.cause = cause;
     }
   }
 }
-
 
 /**
  * CID verification failure.
@@ -97,11 +96,11 @@ export class CidMismatchError extends IpfsStorageError {
 
   constructor(expected: string, actual: string) {
     super(`CID mismatch: expected ${expected}, got ${actual}`);
-    this.name = 'CidMismatchError';
+    this.name = "CidMismatchError";
     this.expected = expected;
     this.actual = actual;
   }
 }
 
 // Re-export encryption errors for convenience
-export { EncryptionError, ErrorCode } from '@0xd49daa/safecrypt';
+export { EncryptionError, ErrorCode } from "@0xd49daa/safecrypt";

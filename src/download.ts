@@ -5,28 +5,25 @@
  * streaming integrity verification, and retry logic.
  */
 
-import type { SymmetricKey } from '@0xd49daa/safecrypt';
-import { hashBlake2b, constantTimeEqual, createBlake2bHasher } from '@0xd49daa/safecrypt';
-import type { IpfsClient } from './ipfs-client.ts';
-import type {
-  FileDownloadRef,
-  DownloadOptions,
-  ChunkRef,
-} from './types.ts';
-import { ChunkEncryption } from './gen/manifest_pb.ts';
-import { deriveFileKey } from './crypto.ts';
-import { decryptSingleShot, decryptStreaming } from './chunk-encrypt.ts';
-import { chunkIdToPath } from './chunk-id.ts';
-import { unsafe } from './branded.ts';
+import type { SymmetricKey } from "@0xd49daa/safecrypt";
 import {
-  ValidationError,
-  IntegrityError,
+  constantTimeEqual,
+  createBlake2bHasher,
+  hashBlake2b,
+} from "@0xd49daa/safecrypt";
+import type { IpfsClient } from "./ipfs-client.ts";
+import type { ChunkRef, DownloadOptions, FileDownloadRef } from "./types.ts";
+import { ChunkEncryption } from "./gen/manifest_pb.ts";
+import { deriveFileKey } from "./crypto.ts";
+import { decryptSingleShot, decryptStreaming } from "./chunk-encrypt.ts";
+import { chunkIdToPath } from "./chunk-id.ts";
+import { unsafe } from "./branded.ts";
+import {
   ChunkUnavailableError,
-} from './errors.ts';
-import {
-  DEFAULT_RETRIES,
-  DEFAULT_CHUNK_CONCURRENCY,
-} from './constants.ts';
+  IntegrityError,
+  ValidationError,
+} from "./errors.ts";
+import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
 
 // ============================================================================
 // Helper Functions
@@ -40,8 +37,8 @@ function checkAbort(signal?: AbortSignal): void {
     throw new DOMException(
       signal.reason instanceof Error
         ? signal.reason.message
-        : String(signal.reason ?? 'Download aborted'),
-      'AbortError'
+        : String(signal.reason ?? "Download aborted"),
+      "AbortError",
     );
   }
 }
@@ -51,7 +48,7 @@ function checkAbort(signal?: AbortSignal): void {
  */
 async function collectBytes(
   iterable: AsyncIterable<Uint8Array>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of iterable) {
@@ -72,23 +69,23 @@ async function collectBytes(
  * Validate FileDownloadRef structure.
  */
 function validateDownloadRef(ref: FileDownloadRef): void {
-  if (!ref.batchCid || typeof ref.batchCid !== 'string') {
-    throw new ValidationError('batchCid must be a non-empty string');
+  if (!ref.batchCid || typeof ref.batchCid !== "string") {
+    throw new ValidationError("batchCid must be a non-empty string");
   }
-  if (!ref.path || typeof ref.path !== 'string') {
-    throw new ValidationError('path must be a non-empty string');
+  if (!ref.path || typeof ref.path !== "string") {
+    throw new ValidationError("path must be a non-empty string");
   }
-  if (typeof ref.size !== 'number' || ref.size < 0) {
-    throw new ValidationError('size must be a non-negative number');
+  if (typeof ref.size !== "number" || ref.size < 0) {
+    throw new ValidationError("size must be a non-negative number");
   }
   if (ref.size > 0 && ref.chunks.length === 0) {
-    throw new ValidationError('non-empty file must have at least one chunk');
+    throw new ValidationError("non-empty file must have at least one chunk");
   }
   if (!ref.contentHash || ref.contentHash.length !== 32) {
-    throw new ValidationError('contentHash must be a 32-byte Uint8Array');
+    throw new ValidationError("contentHash must be a 32-byte Uint8Array");
   }
   if (!ref.manifestKey || ref.manifestKey.length !== 32) {
-    throw new ValidationError('manifestKey must be a 32-byte Uint8Array');
+    throw new ValidationError("manifestKey must be a 32-byte Uint8Array");
   }
 }
 
@@ -100,7 +97,7 @@ async function fetchChunk(
   chunkRef: ChunkRef,
   ipfsClient: IpfsClient,
   maxRetries: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   const chunkPath = `/${chunkIdToPath(unsafe.asChunkId(chunkRef.chunkId))}`;
   let lastError: Error | undefined;
@@ -111,11 +108,11 @@ async function fetchChunk(
     try {
       const bytes = await collectBytes(
         ipfsClient.cat(batchCid, chunkPath),
-        signal
+        signal,
       );
       return bytes;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (error instanceof DOMException && error.name === "AbortError") {
         throw error;
       }
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -135,7 +132,7 @@ async function fetchAndDecryptChunk(
   fileKey: SymmetricKey,
   ipfsClient: IpfsClient,
   maxRetries: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
   // Fetch the encrypted chunk
   const encryptedChunk = await fetchChunk(
@@ -143,13 +140,13 @@ async function fetchAndDecryptChunk(
     chunkRef,
     ipfsClient,
     maxRetries,
-    signal
+    signal,
   );
 
   // Extract segment using offset and encryptedLength
   const segmentBytes = encryptedChunk.slice(
     chunkRef.offset,
-    chunkRef.offset + chunkRef.encryptedLength
+    chunkRef.offset + chunkRef.encryptedLength,
   );
 
   // Decrypt based on encryption mode
@@ -194,7 +191,7 @@ interface ChunkResult {
 export async function* downloadFile(
   ref: FileDownloadRef,
   options: DownloadOptions | undefined,
-  ipfsClient: IpfsClient
+  ipfsClient: IpfsClient,
 ): AsyncIterable<Uint8Array> {
   // Extract options with defaults
   const {
@@ -202,7 +199,7 @@ export async function* downloadFile(
     chunkConcurrency = DEFAULT_CHUNK_CONCURRENCY,
     signal,
     onProgress,
-    integrityMode = 'strict',
+    integrityMode = "strict",
     onIntegrityError,
   } = options ?? {};
 
@@ -212,7 +209,7 @@ export async function* downloadFile(
   // Validate inputs
   validateDownloadRef(ref);
   if (chunkConcurrency < 1) {
-    throw new ValidationError('chunkConcurrency must be at least 1');
+    throw new ValidationError("chunkConcurrency must be at least 1");
   }
 
   // Handle empty files (size 0, no chunks)
@@ -225,9 +222,9 @@ export async function* downloadFile(
       const error = new IntegrityError(
         ref.path,
         ref.contentHash,
-        emptyHash as typeof ref.contentHash
+        emptyHash as typeof ref.contentHash,
       );
-      if (integrityMode === 'strict') {
+      if (integrityMode === "strict") {
         throw error;
       }
       onIntegrityError?.(error);
@@ -270,7 +267,7 @@ export async function* downloadFile(
       fileKey,
       ipfsClient,
       retries,
-      signal
+      signal,
     ).then((data): ChunkResult => ({ index: chunkIndex, data }));
 
     pendingFetches.set(chunkIndex, promise);
@@ -355,9 +352,9 @@ export async function* downloadFile(
     const error = new IntegrityError(
       ref.path,
       ref.contentHash,
-      actualHash as typeof ref.contentHash
+      actualHash as typeof ref.contentHash,
     );
-    if (integrityMode === 'strict') {
+    if (integrityMode === "strict") {
       throw error;
     }
     onIntegrityError?.(error);

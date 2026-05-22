@@ -5,26 +5,33 @@
  * All tests use the public API via createIpfsStorageModule().
  */
 
-import { describe, test, expect, beforeAll, beforeEach, afterEach } from 'bun:test';
 import {
-  preloadSodium,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  it as test,
+} from "@std/testing/bdd";
+import { expect } from "@std/expect";
+import {
+  type ContentHash,
   deriveEncryptionKeyPair,
   deriveSeed,
   hashBlake2b,
-  type ContentHash,
+  preloadSodium,
   type X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+} from "@0xd49daa/safecrypt";
 import {
-  createIpfsStorageModule,
-  MockIpfsClient,
-  ManifestError,
   asAsyncIterable,
-  type StreamingFileInput,
+  type BatchManifest,
+  createIpfsStorageModule,
   type DirectoryInput,
   type FileDownloadRef,
-  type BatchManifest,
   type IpfsStorageModule,
-} from './index.ts';
+  ManifestError,
+  MockIpfsClient,
+  type StreamingFileInput,
+} from "./index.ts";
 
 // ============================================================================
 // Test Helpers
@@ -32,7 +39,7 @@ import {
 
 /** Test mnemonic for deterministic key generation */
 const TEST_MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 /** Create test key pair from mnemonic seed */
 async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
@@ -43,43 +50,45 @@ async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
 /** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
-  path: string
+  path: string,
 ): Promise<StreamingFileInput> {
   const bytes = new TextEncoder().encode(content);
   return {
     path,
     contentHash: (await hashBlake2b(bytes, 32)) as ContentHash,
     size: bytes.length,
-    getStream: () => new ReadableStream({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      }
-    }),
+    getStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
   };
 }
 
 /** Create StreamingFileInput from Uint8Array */
 async function createBinaryFileInput(
   data: Uint8Array,
-  path: string
+  path: string,
 ): Promise<StreamingFileInput> {
   return {
     path,
     contentHash: (await hashBlake2b(data, 32)) as ContentHash,
     size: data.length,
-    getStream: () => new ReadableStream({
-      start(controller) {
-        controller.enqueue(data);
-        controller.close();
-      }
-    }),
+    getStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(data);
+          controller.close();
+        },
+      }),
   };
 }
 
 /** Collect async iterable to Uint8Array */
 async function collectBytes(
-  iterable: AsyncIterable<Uint8Array>
+  iterable: AsyncIterable<Uint8Array>,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of iterable) {
@@ -107,7 +116,7 @@ function generatePatternedBytes(size: number, seed: number = 0): Uint8Array {
 /** Build FileDownloadRef from manifest for a specific file */
 function buildFileRef(
   manifest: BatchManifest,
-  filePath: string
+  filePath: string,
 ): FileDownloadRef {
   const fileInfo = manifest.files.find((f) => f.path === filePath);
   if (!fileInfo) throw new Error(`File not found: ${filePath}`);
@@ -137,7 +146,7 @@ function buildAllFileRefs(manifest: BatchManifest): FileDownloadRef[] {
 // 1. Full Round-Trip Scenarios (7 tests)
 // ============================================================================
 
-describe('Integration: Full Round-Trip', () => {
+describe("Integration: Full Round-Trip", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -154,9 +163,9 @@ describe('Integration: Full Round-Trip', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('single small file: upload -> getManifest -> downloadFile', async () => {
-    const content = 'Hello, Integration Test!';
-    const file = await createFileInput(content, '/hello.txt');
+  test("single small file: upload -> getManifest -> downloadFile", async () => {
+    const content = "Hello, Integration Test!";
+    const file = await createFileInput(content, "/hello.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -173,22 +182,22 @@ describe('Integration: Full Round-Trip', () => {
 
     expect(manifest.cid).toBe(result.cid);
     expect(manifest.files).toHaveLength(1);
-    expect(manifest.files[0]!.path).toBe('/hello.txt');
+    expect(manifest.files[0]!.path).toBe("/hello.txt");
 
-    const ref = buildFileRef(manifest, '/hello.txt');
+    const ref = buildFileRef(manifest, "/hello.txt");
     const downloadedBytes = await collectBytes(module.downloadFile(ref));
     const downloadedContent = new TextDecoder().decode(downloadedBytes);
 
     expect(downloadedContent).toBe(content);
   });
 
-  test('multiple small files: upload -> getManifest -> downloadFiles', async () => {
+  test("multiple small files: upload -> getManifest -> downloadFiles", async () => {
     const files = [
-      await createFileInput('Content A', '/a.txt'),
-      await createFileInput('Content B', '/b.txt'),
-      await createFileInput('Content C', '/c.txt'),
-      await createFileInput('Content D', '/d.txt'),
-      await createFileInput('Content E', '/e.txt'),
+      await createFileInput("Content A", "/a.txt"),
+      await createFileInput("Content B", "/b.txt"),
+      await createFileInput("Content C", "/c.txt"),
+      await createFileInput("Content D", "/d.txt"),
+      await createFileInput("Content E", "/e.txt"),
     ];
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -212,17 +221,17 @@ describe('Integration: Full Round-Trip', () => {
     }
 
     expect(downloaded.size).toBe(5);
-    expect(downloaded.get('/a.txt')).toBe('Content A');
-    expect(downloaded.get('/b.txt')).toBe('Content B');
-    expect(downloaded.get('/c.txt')).toBe('Content C');
-    expect(downloaded.get('/d.txt')).toBe('Content D');
-    expect(downloaded.get('/e.txt')).toBe('Content E');
+    expect(downloaded.get("/a.txt")).toBe("Content A");
+    expect(downloaded.get("/b.txt")).toBe("Content B");
+    expect(downloaded.get("/c.txt")).toBe("Content C");
+    expect(downloaded.get("/d.txt")).toBe("Content D");
+    expect(downloaded.get("/e.txt")).toBe("Content E");
   });
 
-  test('large file (11MB): upload -> getManifest -> downloadFile', async () => {
+  test("large file (11MB): upload -> getManifest -> downloadFile", async () => {
     const size = 11 * 1024 * 1024; // 11MB spans multiple chunks
     const data = generatePatternedBytes(size);
-    const file = await createBinaryFileInput(data, '/large.bin');
+    const file = await createBinaryFileInput(data, "/large.bin");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -238,21 +247,21 @@ describe('Integration: Full Round-Trip', () => {
 
     expect(manifest.files[0]!.chunks.length).toBeGreaterThan(1);
 
-    const ref = buildFileRef(manifest, '/large.bin');
+    const ref = buildFileRef(manifest, "/large.bin");
     const downloadedBytes = await collectBytes(module.downloadFile(ref));
 
     expect(downloadedBytes.length).toBe(size);
     expect(downloadedBytes).toEqual(data);
   });
 
-  test('mixed file sizes: small + large in same batch', async () => {
-    const smallContent = 'Small file content';
+  test("mixed file sizes: small + large in same batch", async () => {
+    const smallContent = "Small file content";
     const largeData = generatePatternedBytes(11 * 1024 * 1024);
 
     const files = [
-      await createFileInput(smallContent, '/small.txt'),
-      await createBinaryFileInput(largeData, '/large.bin'),
-      await createFileInput('Another small file', '/another.txt'),
+      await createFileInput(smallContent, "/small.txt"),
+      await createBinaryFileInput(largeData, "/large.bin"),
+      await createFileInput("Another small file", "/another.txt"),
     ];
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -276,20 +285,20 @@ describe('Integration: Full Round-Trip', () => {
       downloaded.set(file.path, bytes);
     }
 
-    expect(new TextDecoder().decode(downloaded.get('/small.txt'))).toBe(
-      smallContent
+    expect(new TextDecoder().decode(downloaded.get("/small.txt"))).toBe(
+      smallContent,
     );
-    expect(downloaded.get('/large.bin')).toEqual(largeData);
-    expect(new TextDecoder().decode(downloaded.get('/another.txt'))).toBe(
-      'Another small file'
+    expect(downloaded.get("/large.bin")).toEqual(largeData);
+    expect(new TextDecoder().decode(downloaded.get("/another.txt"))).toBe(
+      "Another small file",
     );
   });
 
-  test('batch with directories: explicit empty dirs preserved', async () => {
-    const file = await createFileInput('content', '/docs/readme.txt');
+  test("batch with directories: explicit empty dirs preserved", async () => {
+    const file = await createFileInput("content", "/docs/readme.txt");
     const directories: DirectoryInput[] = [
-      { path: '/empty-folder', created: 1700000000000 },
-      { path: '/another-empty' },
+      { path: "/empty-folder", created: 1700000000000 },
+      { path: "/another-empty" },
     ];
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
@@ -304,10 +313,10 @@ describe('Integration: Full Round-Trip', () => {
     });
 
     const emptyFolder = manifest.directories.find(
-      (d) => d.path === '/empty-folder'
+      (d) => d.path === "/empty-folder",
     );
     const anotherEmpty = manifest.directories.find(
-      (d) => d.path === '/another-empty'
+      (d) => d.path === "/another-empty",
     );
 
     expect(emptyFolder).toBeDefined();
@@ -315,11 +324,11 @@ describe('Integration: Full Round-Trip', () => {
     expect(anotherEmpty).toBeDefined();
   });
 
-  test('file with special path characters: unicode, emoji, spaces', async () => {
+  test("file with special path characters: unicode, emoji, spaces", async () => {
     const files = [
-      await createFileInput('content1', '/photos/vacation 2024/beach.jpg'),
-      await createFileInput('content2', '/docs/日本語.txt'),
-      await createFileInput('content3', '/fun/party.txt'),
+      await createFileInput("content1", "/photos/vacation 2024/beach.jpg"),
+      await createFileInput("content2", "/docs/日本語.txt"),
+      await createFileInput("content3", "/fun/party.txt"),
     ];
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -333,9 +342,9 @@ describe('Integration: Full Round-Trip', () => {
     });
 
     const paths = manifest.files.map((f) => f.path);
-    expect(paths).toContain('/photos/vacation 2024/beach.jpg');
-    expect(paths).toContain('/docs/日本語.txt');
-    expect(paths).toContain('/fun/party.txt');
+    expect(paths).toContain("/photos/vacation 2024/beach.jpg");
+    expect(paths).toContain("/docs/日本語.txt");
+    expect(paths).toContain("/fun/party.txt");
 
     // Verify content round-trips
     for (const fileInfo of manifest.files) {
@@ -345,9 +354,9 @@ describe('Integration: Full Round-Trip', () => {
     }
   });
 
-  test('deeply nested paths: 10 levels of nesting', async () => {
-    const deepPath = '/a/b/c/d/e/f/g/h/i/j/file.txt';
-    const content = 'Deep content';
+  test("deeply nested paths: 10 levels of nesting", async () => {
+    const deepPath = "/a/b/c/d/e/f/g/h/i/j/file.txt";
+    const content = "Deep content";
     const file = await createFileInput(content, deepPath);
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
@@ -365,9 +374,9 @@ describe('Integration: Full Round-Trip', () => {
 
     // Verify paths exist
     const dirPaths = manifest.directories.map((d) => d.path);
-    expect(dirPaths).toContain('/a');
-    expect(dirPaths).toContain('/a/b');
-    expect(dirPaths).toContain('/a/b/c/d/e/f/g/h/i/j');
+    expect(dirPaths).toContain("/a");
+    expect(dirPaths).toContain("/a/b");
+    expect(dirPaths).toContain("/a/b/c/d/e/f/g/h/i/j");
 
     const ref = buildFileRef(manifest, deepPath);
     const downloaded = await collectBytes(module.downloadFile(ref));
@@ -379,7 +388,7 @@ describe('Integration: Full Round-Trip', () => {
 // 2. Multi-Device Recipient Scenarios (5 tests)
 // ============================================================================
 
-describe('Integration: Multi-Device Recipients', () => {
+describe("Integration: Multi-Device Recipients", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -394,12 +403,12 @@ describe('Integration: Multi-Device Recipients', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('2 recipients: both can retrieve and decrypt', async () => {
+  test("2 recipients: both can retrieve and decrypt", async () => {
     const recipient1 = await createTestKeyPair(1);
     const recipient2 = await createTestKeyPair(2);
 
-    const content = 'Shared content';
-    const file = await createFileInput(content, '/shared.txt');
+    const content = "Shared content";
+    const file = await createFileInput(content, "/shared.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -415,7 +424,7 @@ describe('Integration: Multi-Device Recipients', () => {
       expectedSenderPublicKey: senderKeyPair.publicKey,
     });
 
-    const ref1 = buildFileRef(manifest1, '/shared.txt');
+    const ref1 = buildFileRef(manifest1, "/shared.txt");
     const downloaded1 = await collectBytes(module.downloadFile(ref1));
     expect(new TextDecoder().decode(downloaded1)).toBe(content);
 
@@ -425,12 +434,12 @@ describe('Integration: Multi-Device Recipients', () => {
       expectedSenderPublicKey: senderKeyPair.publicKey,
     });
 
-    const ref2 = buildFileRef(manifest2, '/shared.txt');
+    const ref2 = buildFileRef(manifest2, "/shared.txt");
     const downloaded2 = await collectBytes(module.downloadFile(ref2));
     expect(new TextDecoder().decode(downloaded2)).toBe(content);
   });
 
-  test('5 recipients: all can retrieve manifest', async () => {
+  test("5 recipients: all can retrieve manifest", async () => {
     const recipients = await Promise.all([
       createTestKeyPair(1),
       createTestKeyPair(2),
@@ -439,7 +448,7 @@ describe('Integration: Multi-Device Recipients', () => {
       createTestKeyPair(5),
     ]);
 
-    const file = await createFileInput('content for all', '/all.txt');
+    const file = await createFileInput("content for all", "/all.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -454,21 +463,21 @@ describe('Integration: Multi-Device Recipients', () => {
       });
 
       expect(manifest.files).toHaveLength(1);
-      expect(manifest.files[0]!.path).toBe('/all.txt');
+      expect(manifest.files[0]!.path).toBe("/all.txt");
     }
   });
 
-  test('recipients with labels: labels preserved in envelope', async () => {
+  test("recipients with labels: labels preserved in envelope", async () => {
     const recipient1 = await createTestKeyPair(1);
     const recipient2 = await createTestKeyPair(2);
 
-    const file = await createFileInput('content', '/test.txt');
+    const file = await createFileInput("content", "/test.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [
-        { publicKey: recipient1.publicKey, label: 'MacBook' },
-        { publicKey: recipient2.publicKey, label: 'iPhone' },
+        { publicKey: recipient1.publicKey, label: "MacBook" },
+        { publicKey: recipient2.publicKey, label: "iPhone" },
       ],
     });
 
@@ -486,11 +495,11 @@ describe('Integration: Multi-Device Recipients', () => {
     expect(manifest2.files).toHaveLength(1);
   });
 
-  test('wrong recipient cannot decrypt', async () => {
+  test("wrong recipient cannot decrypt", async () => {
     const recipient = await createTestKeyPair(1);
     const wrongRecipient = await createTestKeyPair(99);
 
-    const file = await createFileInput('secret', '/secret.txt');
+    const file = await createFileInput("secret", "/secret.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -502,11 +511,11 @@ describe('Integration: Multi-Device Recipients', () => {
       module.getManifest(result.cid, {
         recipientKeyPair: wrongRecipient,
         expectedSenderPublicKey: senderKeyPair.publicKey,
-      })
+      }),
     ).rejects.toThrow(ManifestError);
   });
 
-  test('multi-recipient with multiple files: complete workflow', async () => {
+  test("multi-recipient with multiple files: complete workflow", async () => {
     const recipients = await Promise.all([
       createTestKeyPair(1),
       createTestKeyPair(2),
@@ -514,11 +523,11 @@ describe('Integration: Multi-Device Recipients', () => {
     ]);
 
     const files = [
-      await createFileInput('File 1 content', '/file1.txt'),
-      await createFileInput('File 2 content', '/file2.txt'),
-      await createFileInput('File 3 content', '/file3.txt'),
-      await createFileInput('File 4 content', '/file4.txt'),
-      await createFileInput('File 5 content', '/file5.txt'),
+      await createFileInput("File 1 content", "/file1.txt"),
+      await createFileInput("File 2 content", "/file2.txt"),
+      await createFileInput("File 3 content", "/file3.txt"),
+      await createFileInput("File 4 content", "/file4.txt"),
+      await createFileInput("File 5 content", "/file5.txt"),
     ];
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -544,8 +553,8 @@ describe('Integration: Multi-Device Recipients', () => {
       }
 
       expect(downloaded.size).toBe(5);
-      expect(downloaded.get('/file1.txt')).toBe('File 1 content');
-      expect(downloaded.get('/file5.txt')).toBe('File 5 content');
+      expect(downloaded.get("/file1.txt")).toBe("File 1 content");
+      expect(downloaded.get("/file5.txt")).toBe("File 5 content");
     }
   });
 });
@@ -554,7 +563,7 @@ describe('Integration: Multi-Device Recipients', () => {
 // 3. Large Batch with Manifest Splitting (4 tests)
 // ============================================================================
 
-describe('Integration: Manifest Splitting', () => {
+describe("Integration: Manifest Splitting", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -571,15 +580,16 @@ describe('Integration: Manifest Splitting', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('large batch with many files: all files accessible', async () => {
+  test("large batch with many files: all files accessible", async () => {
     // Create many files to test large batch handling
     // This tests the manifest building and retrieval workflow at scale
     // Note: The public API doesn't expose maxSubManifestSize, so we verify
     // the workflow works correctly regardless of internal splitting decisions
     const files: StreamingFileInput[] = [];
     for (let i = 0; i < 500; i++) {
-      const paddedIndex = i.toString().padStart(5, '0');
-      const longPath = `/directory_with_long_name_${paddedIndex}/subdirectory_also_long/file_${paddedIndex}.txt`;
+      const paddedIndex = i.toString().padStart(5, "0");
+      const longPath =
+        `/directory_with_long_name_${paddedIndex}/subdirectory_also_long/file_${paddedIndex}.txt`;
       files.push(await createFileInput(`Content ${i}`, longPath));
     }
 
@@ -608,16 +618,16 @@ describe('Integration: Manifest Splitting', () => {
     }
   });
 
-  test('file retrieval across batch returns correct content', async () => {
+  test("file retrieval across batch returns correct content", async () => {
     // Create files and verify content retrieval works correctly
     const files: StreamingFileInput[] = [];
     for (let i = 0; i < 100; i++) {
-      const paddedIndex = i.toString().padStart(3, '0');
+      const paddedIndex = i.toString().padStart(3, "0");
       files.push(
         await createFileInput(
           `Unique content ${i}`,
-          `/dir_${paddedIndex}/file.txt`
-        )
+          `/dir_${paddedIndex}/file.txt`,
+        ),
       );
     }
 
@@ -640,28 +650,28 @@ describe('Integration: Manifest Splitting', () => {
 
     const ref1 = buildFileRef(manifest, firstFile.path);
     const content1 = new TextDecoder().decode(
-      await collectBytes(module.downloadFile(ref1))
+      await collectBytes(module.downloadFile(ref1)),
     );
     expect(content1).toMatch(/^Unique content \d+$/);
 
     const ref2 = buildFileRef(manifest, lastFile.path);
     const content2 = new TextDecoder().decode(
-      await collectBytes(module.downloadFile(ref2))
+      await collectBytes(module.downloadFile(ref2)),
     );
     expect(content2).toMatch(/^Unique content \d+$/);
 
     const ref3 = buildFileRef(manifest, middleFile.path);
     const content3 = new TextDecoder().decode(
-      await collectBytes(module.downloadFile(ref3))
+      await collectBytes(module.downloadFile(ref3)),
     );
     expect(content3).toMatch(/^Unique content \d+$/);
   });
 
-  test('manifest files are sorted by path (byte-wise)', async () => {
+  test("manifest files are sorted by path (byte-wise)", async () => {
     // Create files with paths that should sort in a specific order
-    const paths = ['/z.txt', '/a.txt', '/m.txt', '/b.txt', '/y.txt'];
+    const paths = ["/z.txt", "/a.txt", "/m.txt", "/b.txt", "/y.txt"];
     const files = await Promise.all(
-      paths.map((p) => createFileInput(`content for ${p}`, p))
+      paths.map((p) => createFileInput(`content for ${p}`, p)),
     );
 
     // Add more files with varied paths
@@ -669,8 +679,8 @@ describe('Integration: Manifest Splitting', () => {
       files.push(
         await createFileInput(
           `padding ${i}`,
-          `/dir_${i.toString().padStart(3, '0')}/file.txt`
-        )
+          `/dir_${i.toString().padStart(3, "0")}/file.txt`,
+        ),
       );
     }
 
@@ -700,7 +710,7 @@ describe('Integration: Manifest Splitting', () => {
     expect(filePaths).toEqual(sortedPaths);
   });
 
-  test('directories preserved correctly with large file batches', async () => {
+  test("directories preserved correctly with large file batches", async () => {
     // Create files with many directories and verify directories round-trip correctly
     const files: StreamingFileInput[] = [];
     const directories: DirectoryInput[] = [];
@@ -708,7 +718,7 @@ describe('Integration: Manifest Splitting', () => {
     // Add explicit empty directories
     for (let i = 0; i < 50; i++) {
       directories.push({
-        path: `/empty_dir_${i.toString().padStart(3, '0')}`,
+        path: `/empty_dir_${i.toString().padStart(3, "0")}`,
         created: 1700000000000 + i,
       });
     }
@@ -718,8 +728,8 @@ describe('Integration: Manifest Splitting', () => {
       files.push(
         await createFileInput(
           `content ${i}`,
-          `/files_dir_${i.toString().padStart(3, '0')}/file.txt`
-        )
+          `/files_dir_${i.toString().padStart(3, "0")}/file.txt`,
+        ),
       );
     }
 
@@ -739,7 +749,7 @@ describe('Integration: Manifest Splitting', () => {
     // Verify all explicit directories are present with correct timestamps
     for (let i = 0; i < 50; i++) {
       const dir = manifest.directories.find(
-        (d) => d.path === `/empty_dir_${i.toString().padStart(3, '0')}`
+        (d) => d.path === `/empty_dir_${i.toString().padStart(3, "0")}`,
       );
       expect(dir).toBeDefined();
       expect(dir!.created).toBe(1700000000000 + i);
@@ -748,7 +758,7 @@ describe('Integration: Manifest Splitting', () => {
     // Verify inferred directories also present
     for (let i = 0; i < 200; i++) {
       const dir = manifest.directories.find(
-        (d) => d.path === `/files_dir_${i.toString().padStart(3, '0')}`
+        (d) => d.path === `/files_dir_${i.toString().padStart(3, "0")}`,
       );
       expect(dir).toBeDefined();
     }
@@ -759,7 +769,7 @@ describe('Integration: Manifest Splitting', () => {
 // 4. Concurrent Download Stress Test (5 tests)
 // ============================================================================
 
-describe('Integration: Concurrent Downloads', () => {
+describe("Integration: Concurrent Downloads", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -781,9 +791,9 @@ describe('Integration: Concurrent Downloads', () => {
         .map((_, i) =>
           createFileInput(
             `Content ${i}`.repeat(100),
-            `/file${i.toString().padStart(2, '0')}.txt`
+            `/file${i.toString().padStart(2, "0")}.txt`,
           )
-        )
+        ),
     );
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -797,7 +807,7 @@ describe('Integration: Concurrent Downloads', () => {
     });
   });
 
-  test('downloadFiles with concurrency=5: all files retrieved correctly', async () => {
+  test("downloadFiles with concurrency=5: all files retrieved correctly", async () => {
     const refs = buildAllFileRefs(uploadedManifest);
     const downloaded: Map<string, string> = new Map();
 
@@ -818,7 +828,7 @@ describe('Integration: Concurrent Downloads', () => {
     }
   });
 
-  test('downloadFiles with concurrency=1: sequential still works', async () => {
+  test("downloadFiles with concurrency=1: sequential still works", async () => {
     const refs = buildAllFileRefs(uploadedManifest);
     const downloaded: string[] = [];
 
@@ -830,7 +840,7 @@ describe('Integration: Concurrent Downloads', () => {
     expect(downloaded.length).toBe(20);
   });
 
-  test('downloadFiles with concurrency=10: high parallelism', async () => {
+  test("downloadFiles with concurrency=10: high parallelism", async () => {
     const refs = buildAllFileRefs(uploadedManifest);
     const downloaded: string[] = [];
 
@@ -842,45 +852,54 @@ describe('Integration: Concurrent Downloads', () => {
     expect(downloaded.length).toBe(20);
   });
 
-  test('progress tracking: aggregate bytes correct across concurrent downloads', async () => {
+  test("progress tracking: aggregate bytes correct across concurrent downloads", async () => {
     const refs = buildAllFileRefs(uploadedManifest);
     const progressUpdates: number[] = [];
 
-    for await (const file of module.downloadFiles(refs, {
-      concurrency: 5,
-      onProgress: (p) => progressUpdates.push(p.bytesDownloaded),
-    })) {
+    for await (
+      const file of module.downloadFiles(refs, {
+        concurrency: 5,
+        onProgress: (p) => progressUpdates.push(p.bytesDownloaded),
+      })
+    ) {
       await collectBytes(file.content);
     }
 
     // Verify progress is monotonically increasing
     for (let i = 1; i < progressUpdates.length; i++) {
-      expect(progressUpdates[i]).toBeGreaterThanOrEqual(progressUpdates[i - 1]!);
+      expect(progressUpdates[i]).toBeGreaterThanOrEqual(
+        progressUpdates[i - 1]!,
+      );
     }
 
     // Final progress should equal total bytes
-    const totalBytes = uploadedManifest.files.reduce((sum, f) => sum + f.size, 0);
+    const totalBytes = uploadedManifest.files.reduce(
+      (sum, f) => sum + f.size,
+      0,
+    );
     expect(progressUpdates[progressUpdates.length - 1]).toBe(totalBytes);
   });
 
-  test('error in one file (continue mode): other files complete', async () => {
+  test("error in one file (continue mode): other files complete", async () => {
     // Create refs with one that has invalid batchCid
     const refs = buildAllFileRefs(uploadedManifest);
     const invalidRef: FileDownloadRef = {
       ...refs[10]!,
-      batchCid: 'bafybeiinvalidcidthatwontwork',
+      batchCid: "bafybeiinvalidcidthatwontwork",
     };
     refs[10] = invalidRef;
 
     const downloaded: string[] = [];
     const errors: Error[] = [];
 
-    for await (const file of module.downloadFiles(refs, {
-      concurrency: 3,
-      onError: (err) => {
-        errors.push(err);
-      },
-    })) {
+    for await (
+      const file of module.downloadFiles(refs, {
+        concurrency: 3,
+        onError: (err) => {
+          errors.push(err);
+        },
+      })
+    ) {
       await collectBytes(file.content);
       downloaded.push(file.path);
     }
@@ -895,7 +914,7 @@ describe('Integration: Concurrent Downloads', () => {
 // 6. Edge Cases (12 tests)
 // ============================================================================
 
-describe('Integration: Edge Cases', () => {
+describe("Integration: Edge Cases", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -912,8 +931,8 @@ describe('Integration: Edge Cases', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('single empty file (0 bytes): round-trip succeeds', async () => {
-    const file = await createFileInput('', '/empty.txt');
+  test("single empty file (0 bytes): round-trip succeeds", async () => {
+    const file = await createFileInput("", "/empty.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -928,16 +947,16 @@ describe('Integration: Edge Cases', () => {
     expect(manifest.files[0]!.size).toBe(0);
     expect(manifest.files[0]!.chunks).toHaveLength(0);
 
-    const ref = buildFileRef(manifest, '/empty.txt');
+    const ref = buildFileRef(manifest, "/empty.txt");
     const downloaded = await collectBytes(module.downloadFile(ref));
     expect(downloaded.length).toBe(0);
   });
 
-  test('batch of only empty files: all round-trip correctly', async () => {
+  test("batch of only empty files: all round-trip correctly", async () => {
     const files = await Promise.all([
-      createFileInput('', '/empty1.txt'),
-      createFileInput('', '/empty2.txt'),
-      createFileInput('', '/dir/empty3.txt'),
+      createFileInput("", "/empty1.txt"),
+      createFileInput("", "/empty2.txt"),
+      createFileInput("", "/dir/empty3.txt"),
     ]);
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -958,11 +977,11 @@ describe('Integration: Edge Cases', () => {
     }
   });
 
-  test('mixed empty and non-empty files', async () => {
+  test("mixed empty and non-empty files", async () => {
     const files = await Promise.all([
-      createFileInput('', '/empty.txt'),
-      createFileInput('has content', '/content.txt'),
-      createFileInput('', '/another-empty.txt'),
+      createFileInput("", "/empty.txt"),
+      createFileInput("has content", "/content.txt"),
+      createFileInput("", "/another-empty.txt"),
     ]);
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -983,20 +1002,20 @@ describe('Integration: Edge Cases', () => {
       downloaded.set(file.path, bytes);
     }
 
-    expect(downloaded.get('/empty.txt')!.length).toBe(0);
-    expect(new TextDecoder().decode(downloaded.get('/content.txt'))).toBe(
-      'has content'
+    expect(downloaded.get("/empty.txt")!.length).toBe(0);
+    expect(new TextDecoder().decode(downloaded.get("/content.txt"))).toBe(
+      "has content",
     );
-    expect(downloaded.get('/another-empty.txt')!.length).toBe(0);
+    expect(downloaded.get("/another-empty.txt")!.length).toBe(0);
   });
 
-  test('explicit empty directory: preserved in manifest', async () => {
-    const file = await createFileInput('content', '/docs/file.txt');
+  test("explicit empty directory: preserved in manifest", async () => {
+    const file = await createFileInput("content", "/docs/file.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
-      directories: [{ path: '/empty-album', created: 12345 }],
+      directories: [{ path: "/empty-album", created: 12345 }],
     });
 
     const manifest = await module.getManifest(result.cid, {
@@ -1004,21 +1023,23 @@ describe('Integration: Edge Cases', () => {
       expectedSenderPublicKey: senderKeyPair.publicKey,
     });
 
-    const emptyDir = manifest.directories.find((d) => d.path === '/empty-album');
+    const emptyDir = manifest.directories.find((d) =>
+      d.path === "/empty-album"
+    );
     expect(emptyDir).toBeDefined();
     expect(emptyDir!.created).toBe(12345);
   });
 
-  test('nested empty directories structure', async () => {
-    const file = await createFileInput('content', '/a.txt');
+  test("nested empty directories structure", async () => {
+    const file = await createFileInput("content", "/a.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
       recipients: [{ publicKey: recipientKeyPair.publicKey }],
       directories: [
-        { path: '/empty' },
-        { path: '/empty/nested' },
-        { path: '/empty/nested/deep' },
+        { path: "/empty" },
+        { path: "/empty/nested" },
+        { path: "/empty/nested/deep" },
       ],
     });
 
@@ -1028,13 +1049,13 @@ describe('Integration: Edge Cases', () => {
     });
 
     const dirPaths = manifest.directories.map((d) => d.path);
-    expect(dirPaths).toContain('/empty');
-    expect(dirPaths).toContain('/empty/nested');
-    expect(dirPaths).toContain('/empty/nested/deep');
+    expect(dirPaths).toContain("/empty");
+    expect(dirPaths).toContain("/empty/nested");
+    expect(dirPaths).toContain("/empty/nested/deep");
   });
 
-  test('single file batch (trivial case)', async () => {
-    const file = await createFileInput('single file', '/only-file.txt');
+  test("single file batch (trivial case)", async () => {
+    const file = await createFileInput("single file", "/only-file.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -1048,17 +1069,17 @@ describe('Integration: Edge Cases', () => {
 
     expect(manifest.files).toHaveLength(1);
 
-    const ref = buildFileRef(manifest, '/only-file.txt');
+    const ref = buildFileRef(manifest, "/only-file.txt");
     const downloaded = await collectBytes(module.downloadFile(ref));
-    expect(new TextDecoder().decode(downloaded)).toBe('single file');
+    expect(new TextDecoder().decode(downloaded)).toBe("single file");
   });
 
-  test('unicode filenames: CJK, emoji, accents', async () => {
+  test("unicode filenames: CJK, emoji, accents", async () => {
     const files = await Promise.all([
-      createFileInput('japanese', '/日本語ファイル.txt'),
-      createFileInput('emoji', '/party.txt'),
-      createFileInput('accent', '/café.txt'),
-      createFileInput('greek', '/Ω-omega.txt'),
+      createFileInput("japanese", "/日本語ファイル.txt"),
+      createFileInput("emoji", "/party.txt"),
+      createFileInput("accent", "/café.txt"),
+      createFileInput("greek", "/Ω-omega.txt"),
     ]);
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -1072,10 +1093,10 @@ describe('Integration: Edge Cases', () => {
     });
 
     const paths = manifest.files.map((f) => f.path);
-    expect(paths).toContain('/日本語ファイル.txt');
-    expect(paths).toContain('/party.txt');
-    expect(paths).toContain('/café.txt');
-    expect(paths).toContain('/Ω-omega.txt');
+    expect(paths).toContain("/日本語ファイル.txt");
+    expect(paths).toContain("/party.txt");
+    expect(paths).toContain("/café.txt");
+    expect(paths).toContain("/Ω-omega.txt");
 
     // Verify each downloads correctly
     for (const fileInfo of manifest.files) {
@@ -1085,9 +1106,9 @@ describe('Integration: Edge Cases', () => {
     }
   });
 
-  test('deeply nested path (10 levels)', async () => {
-    const deepPath = '/l1/l2/l3/l4/l5/l6/l7/l8/l9/l10/file.txt';
-    const file = await createFileInput('deep', deepPath);
+  test("deeply nested path (10 levels)", async () => {
+    const deepPath = "/l1/l2/l3/l4/l5/l6/l7/l8/l9/l10/file.txt";
+    const file = await createFileInput("deep", deepPath);
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -1102,16 +1123,16 @@ describe('Integration: Edge Cases', () => {
     expect(manifest.directories.length).toBe(10);
   });
 
-  test('large batch: 100+ files', async () => {
+  test("large batch: 100+ files", async () => {
     const files = await Promise.all(
       Array(150)
         .fill(null)
         .map((_, i) =>
           createFileInput(
             `Content ${i}`,
-            `/file${i.toString().padStart(3, '0')}.txt`
+            `/file${i.toString().padStart(3, "0")}.txt`,
           )
-        )
+        ),
     );
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -1127,15 +1148,18 @@ describe('Integration: Edge Cases', () => {
     expect(manifest.files).toHaveLength(150);
   });
 
-  test('duplicate paths: auto-rename preserves content', async () => {
-    const file1 = await createFileInput('first', '/photo.jpg');
-    const file2 = await createFileInput('second', '/photo.jpg');
-    const file3 = await createFileInput('third', '/photo.jpg');
+  test("duplicate paths: auto-rename preserves content", async () => {
+    const file1 = await createFileInput("first", "/photo.jpg");
+    const file2 = await createFileInput("second", "/photo.jpg");
+    const file3 = await createFileInput("third", "/photo.jpg");
 
-    const result = await module.uploadBatch(asAsyncIterable([file1, file2, file3]), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
-    });
+    const result = await module.uploadBatch(
+      asAsyncIterable([file1, file2, file3]),
+      {
+        senderKeyPair,
+        recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      },
+    );
 
     expect(result.renamed).toBeDefined();
     expect(result.renamed!.length).toBe(2);
@@ -1146,9 +1170,9 @@ describe('Integration: Edge Cases', () => {
     });
 
     const paths = manifest.files.map((f) => f.path);
-    expect(paths).toContain('/photo.jpg');
-    expect(paths).toContain('/photo_1.jpg');
-    expect(paths).toContain('/photo_2.jpg');
+    expect(paths).toContain("/photo.jpg");
+    expect(paths).toContain("/photo_1.jpg");
+    expect(paths).toContain("/photo_2.jpg");
 
     // Verify content of each
     const refs = buildAllFileRefs(manifest);
@@ -1159,15 +1183,15 @@ describe('Integration: Edge Cases', () => {
       downloaded.set(file.path, new TextDecoder().decode(bytes));
     }
 
-    expect(downloaded.get('/photo.jpg')).toBe('first');
-    expect(downloaded.get('/photo_1.jpg')).toBe('second');
-    expect(downloaded.get('/photo_2.jpg')).toBe('third');
+    expect(downloaded.get("/photo.jpg")).toBe("first");
+    expect(downloaded.get("/photo_1.jpg")).toBe("second");
+    expect(downloaded.get("/photo_2.jpg")).toBe("third");
   });
 
-  test('file at exact 10MB boundary', async () => {
+  test("file at exact 10MB boundary", async () => {
     const exactChunkSize = 10 * 1024 * 1024; // Exactly 10MB
     const data = generatePatternedBytes(exactChunkSize);
-    const file = await createBinaryFileInput(data, '/exact-10mb.bin');
+    const file = await createBinaryFileInput(data, "/exact-10mb.bin");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -1181,7 +1205,7 @@ describe('Integration: Edge Cases', () => {
       expectedSenderPublicKey: senderKeyPair.publicKey,
     });
 
-    const ref = buildFileRef(manifest, '/exact-10mb.bin');
+    const ref = buildFileRef(manifest, "/exact-10mb.bin");
     const downloaded = await collectBytes(module.downloadFile(ref));
 
     expect(downloaded.length).toBe(exactChunkSize);
@@ -1193,7 +1217,7 @@ describe('Integration: Edge Cases', () => {
 // 7. Smoke Tests (3 tests)
 // ============================================================================
 
-describe('Integration: Smoke Tests', () => {
+describe("Integration: Smoke Tests", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
   let senderKeyPair: X25519KeyPair;
@@ -1210,7 +1234,7 @@ describe('Integration: Smoke Tests', () => {
     module = createIpfsStorageModule({ ipfsClient });
   });
 
-  test('100 small files batch: full round-trip completes', async () => {
+  test("100 small files batch: full round-trip completes", async () => {
     // Smoke test: verify 100 files can complete the full workflow
     // No timing assertions to avoid CI flakiness
     const files = await Promise.all(
@@ -1219,9 +1243,9 @@ describe('Integration: Smoke Tests', () => {
         .map((_, i) =>
           createFileInput(
             `content ${i}`,
-            `/file${i.toString().padStart(3, '0')}.txt`
+            `/file${i.toString().padStart(3, "0")}.txt`,
           )
-        )
+        ),
     );
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -1248,11 +1272,11 @@ describe('Integration: Smoke Tests', () => {
     expect(downloadedCount).toBe(100);
   });
 
-  test('10MB file: full round-trip completes', async () => {
+  test("10MB file: full round-trip completes", async () => {
     // Smoke test: verify 10MB file can complete the full workflow
     // No timing assertions to avoid CI flakiness
     const data = generatePatternedBytes(10 * 1024 * 1024);
-    const file = await createBinaryFileInput(data, '/large.bin');
+    const file = await createBinaryFileInput(data, "/large.bin");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
       senderKeyPair,
@@ -1268,14 +1292,14 @@ describe('Integration: Smoke Tests', () => {
     });
 
     const downloaded = await collectBytes(
-      module.downloadFile(buildFileRef(manifest, '/large.bin'))
+      module.downloadFile(buildFileRef(manifest, "/large.bin")),
     );
 
     expect(downloaded.length).toBe(10 * 1024 * 1024);
     expect(downloaded).toEqual(data);
   });
 
-  test('memory stability: no excessive growth during batch operations', async () => {
+  test("memory stability: no excessive growth during batch operations", async () => {
     // Process multiple batches and ensure no obvious memory issues
     for (let batch = 0; batch < 5; batch++) {
       const files = await Promise.all(
@@ -1284,9 +1308,9 @@ describe('Integration: Smoke Tests', () => {
           .map((_, i) =>
             createFileInput(
               `batch ${batch} file ${i}`,
-              `/batch${batch}/file${i}.txt`
+              `/batch${batch}/file${i}.txt`,
             )
-          )
+          ),
       );
 
       const result = await module.uploadBatch(asAsyncIterable(files), {
@@ -1299,7 +1323,9 @@ describe('Integration: Smoke Tests', () => {
         expectedSenderPublicKey: senderKeyPair.publicKey,
       });
 
-      for await (const file of module.downloadFiles(buildAllFileRefs(manifest))) {
+      for await (
+        const file of module.downloadFiles(buildAllFileRefs(manifest))
+      ) {
         await collectBytes(file.content);
       }
 

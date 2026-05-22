@@ -2,45 +2,46 @@
  * Tests for Manifest Retrieval (Phase 13).
  */
 
-import { describe, test, expect, beforeAll } from 'bun:test';
+import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { expect } from "@std/expect";
 import {
-  preloadSodium,
+  type ContentHash,
   deriveEncryptionKeyPair,
   deriveSeed,
-  hashBlake2b,
   encrypt,
-  wrapKeyAuthenticatedMulti,
   generateKey,
+  hashBlake2b,
+  preloadSodium,
   type SymmetricKey,
-  type ContentHash,
+  wrapKeyAuthenticatedMulti,
   type X25519KeyPair,
-} from '@0xd49daa/safecrypt';
+} from "@0xd49daa/safecrypt";
 import {
-  MockIpfsClient,
-  ValidationError,
-  ManifestError,
   asAsyncIterable,
+  ManifestError,
+  MockIpfsClient,
   type StreamingFileInput,
-} from './index.ts';
-import { getManifest } from './manifest-retrieval.ts';
-import { uploadBatch } from './streaming-upload.ts';
+  ValidationError,
+} from "./index.ts";
+import { getManifest } from "./manifest-retrieval.ts";
+import { uploadBatch } from "./streaming-upload.ts";
 import {
   encodeManifestEnvelope,
   encodeRootManifest,
   encodeSubManifest,
-} from './serialization.ts';
-import { deriveFileKey } from './crypto.ts';
-import { decryptSingleShot } from './chunk-encrypt.ts';
-import { chunkIdToPath } from './chunk-id.ts';
-import { MANIFEST_DOMAIN, NONCE_SIZE } from './constants.ts';
-import { asChunkId } from './branded.ts';
+} from "./serialization.ts";
+import { deriveFileKey } from "./crypto.ts";
+import { decryptSingleShot } from "./chunk-encrypt.ts";
+import { chunkIdToPath } from "./chunk-id.ts";
+import { MANIFEST_DOMAIN, NONCE_SIZE } from "./constants.ts";
+import { asChunkId } from "./branded.ts";
 import type {
   GetManifestOptions,
+  ManifestEnvelopeData,
   RecipientKeyInfo,
   RootManifestData,
   SubManifestData,
-  ManifestEnvelopeData,
-} from './types.ts';
+} from "./types.ts";
 
 // ============================================================================
 // Test Helpers
@@ -64,43 +65,45 @@ async function hashBytes(data: Uint8Array): Promise<ContentHash> {
 /** Create StreamingFileInput from string content */
 async function createFileInput(
   content: string,
-  path: string
+  path: string,
 ): Promise<StreamingFileInput> {
   const bytes = new TextEncoder().encode(content);
   return {
     path,
     contentHash: await hashString(content),
     size: bytes.length,
-    getStream: () => new ReadableStream({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      }
-    }),
+    getStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
   };
 }
 
 /** Create StreamingFileInput from Uint8Array */
 async function createBinaryFileInput(
   data: Uint8Array,
-  path: string
+  path: string,
 ): Promise<StreamingFileInput> {
   return {
     path,
     contentHash: await hashBytes(data),
     size: data.length,
-    getStream: () => new ReadableStream({
-      start(controller) {
-        controller.enqueue(data);
-        controller.close();
-      }
-    }),
+    getStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(data);
+          controller.close();
+        },
+      }),
   };
 }
 
 // Test mnemonic (12 words)
 const TEST_MNEMONIC =
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 /** Create test key pair from mnemonic seed */
 async function createTestKeyPair(index = 0): Promise<X25519KeyPair> {
@@ -110,7 +113,7 @@ async function createTestKeyPair(index = 0): Promise<X25519KeyPair> {
 
 /** Collect async iterable to Uint8Array */
 async function collectBytes(
-  iterable: AsyncIterable<Uint8Array>
+  iterable: AsyncIterable<Uint8Array>,
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of iterable) {
@@ -132,7 +135,7 @@ function combineNonceAndCiphertext(encrypted: {
   ciphertext: Uint8Array;
 }): Uint8Array {
   const combined = new Uint8Array(
-    encrypted.nonce.length + encrypted.ciphertext.length
+    encrypted.nonce.length + encrypted.ciphertext.length,
   );
   combined.set(encrypted.nonce, 0);
   combined.set(encrypted.ciphertext, encrypted.nonce.length);
@@ -143,20 +146,20 @@ function combineNonceAndCiphertext(encrypted: {
 // Phase 13: Basic Functionality Tests
 // ============================================================================
 
-describe('getManifest - basic functionality', () => {
-  test('retrieves and decrypts manifest for matching recipient', async () => {
+describe("getManifest - basic functionality", () => {
+  test("retrieves and decrypts manifest for matching recipient", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Upload a batch
-    const file = await createFileInput('Hello, World!', '/hello.txt');
+    const file = await createFileInput("Hello, World!", "/hello.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Retrieve the manifest
@@ -168,22 +171,22 @@ describe('getManifest - basic functionality', () => {
 
     expect(manifest.cid).toBe(result.cid);
     expect(manifest.files.length).toBe(1);
-    expect(manifest.files[0]!.path).toBe('/hello.txt');
+    expect(manifest.files[0]!.path).toBe("/hello.txt");
   });
 
-  test('returns correct BatchManifest structure', async () => {
+  test("returns correct BatchManifest structure", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('test content', '/test.txt');
+    const file = await createFileInput("test content", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
-        directories: [{ path: '/docs', created: 1000 }],
+        directories: [{ path: "/docs", created: 1000 }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(result.cid, {
@@ -198,22 +201,22 @@ describe('getManifest - basic functionality', () => {
     expect(manifest.senderPublicKey).toEqual(keyPair.publicKey);
     expect(Array.isArray(manifest.directories)).toBe(true);
     expect(Array.isArray(manifest.files)).toBe(true);
-    expect(typeof manifest.created).toBe('number');
+    expect(typeof manifest.created).toBe("number");
   });
 
-  test('directories array matches uploaded directories', async () => {
+  test("directories array matches uploaded directories", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('content', '/photos/2024/img.jpg');
+    const file = await createFileInput("content", "/photos/2024/img.jpg");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
-        directories: [{ path: '/empty', created: 12345 }],
+        directories: [{ path: "/empty", created: 12345 }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(result.cid, {
@@ -224,28 +227,28 @@ describe('getManifest - basic functionality', () => {
 
     // Should have inferred directories + explicit empty directory
     const dirPaths = manifest.directories.map((d) => d.path);
-    expect(dirPaths).toContain('/photos');
-    expect(dirPaths).toContain('/photos/2024');
-    expect(dirPaths).toContain('/empty');
+    expect(dirPaths).toContain("/photos");
+    expect(dirPaths).toContain("/photos/2024");
+    expect(dirPaths).toContain("/empty");
 
     // Explicit directory should have its timestamp preserved
-    const emptyDir = manifest.directories.find((d) => d.path === '/empty');
+    const emptyDir = manifest.directories.find((d) => d.path === "/empty");
     expect(emptyDir?.created).toBe(12345);
   });
 
-  test('files array matches uploaded files', async () => {
+  test("files array matches uploaded files", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file1 = await createFileInput('content 1', '/a.txt');
-    const file2 = await createFileInput('content 2', '/b.txt');
+    const file1 = await createFileInput("content 1", "/a.txt");
+    const file2 = await createFileInput("content 2", "/b.txt");
     const result = await uploadBatch(
       asAsyncIterable([file1, file2]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(result.cid, {
@@ -255,24 +258,24 @@ describe('getManifest - basic functionality', () => {
     });
 
     const filePaths = manifest.files.map((f) => f.path);
-    expect(filePaths).toContain('/a.txt');
-    expect(filePaths).toContain('/b.txt');
+    expect(filePaths).toContain("/a.txt");
+    expect(filePaths).toContain("/b.txt");
     expect(manifest.files.length).toBe(2);
   });
 
-  test('manifestKey is usable for file key derivation', async () => {
+  test("manifestKey is usable for file key derivation", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const fileContent = 'secret data';
-    const file = await createFileInput(fileContent, '/secret.txt');
+    const fileContent = "secret data";
+    const file = await createFileInput(fileContent, "/secret.txt");
     const uploadResult = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(uploadResult.cid, {
@@ -286,17 +289,17 @@ describe('getManifest - basic functionality', () => {
     const chunkRef = fileInfo.chunks[0]!;
     const fileKey = await deriveFileKey(
       manifest.manifestKey,
-      fileInfo.contentHash
+      fileInfo.contentHash,
     );
 
     // Fetch and decrypt chunk
     const chunkPath = chunkIdToPath(asChunkId(chunkRef.chunkId));
     const encryptedBytes = await collectBytes(
-      ipfsClient.cat(manifest.cid, `/${chunkPath}`)
+      ipfsClient.cat(manifest.cid, `/${chunkPath}`),
     );
     const segmentBytes = encryptedBytes.slice(
       chunkRef.offset,
-      chunkRef.offset + chunkRef.encryptedLength
+      chunkRef.offset + chunkRef.encryptedLength,
     );
     const plaintext = await decryptSingleShot(segmentBytes, fileKey);
     const trimmed = plaintext.slice(0, chunkRef.length);
@@ -309,19 +312,19 @@ describe('getManifest - basic functionality', () => {
 // Phase 13: Sender Verification Tests
 // ============================================================================
 
-describe('getManifest - sender verification', () => {
-  test('succeeds when expectedSenderPublicKey matches', async () => {
+describe("getManifest - sender verification", () => {
+  test("succeeds when expectedSenderPublicKey matches", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Should succeed with matching sender key
@@ -334,20 +337,20 @@ describe('getManifest - sender verification', () => {
     expect(manifest.cid).toBe(result.cid);
   });
 
-  test('throws ManifestError when expectedSenderPublicKey does not match', async () => {
+  test("throws ManifestError when expectedSenderPublicKey does not match", async () => {
     const senderKeyPair = await createTestKeyPair(0);
     const recipientKeyPair = await createTestKeyPair(1);
     const wrongSenderKeyPair = await createTestKeyPair(2);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: senderKeyPair,
         recipients: [{ publicKey: recipientKeyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Should fail with wrong sender key
@@ -356,7 +359,7 @@ describe('getManifest - sender verification', () => {
         ipfsClient,
         recipientKeyPair: recipientKeyPair,
         expectedSenderPublicKey: wrongSenderKeyPair.publicKey, // wrong!
-      })
+      }),
     ).rejects.toThrow(ManifestError);
 
     await expect(
@@ -364,25 +367,25 @@ describe('getManifest - sender verification', () => {
         ipfsClient,
         recipientKeyPair: recipientKeyPair,
         expectedSenderPublicKey: wrongSenderKeyPair.publicKey,
-      })
-    ).rejects.toThrow('Sender public key mismatch');
+      }),
+    ).rejects.toThrow("Sender public key mismatch");
   });
 
-  test('prevents swapped sender attack', async () => {
+  test("prevents swapped sender attack", async () => {
     // This test verifies that even if an attacker modifies the envelope
     // to use their sender key, we detect the mismatch
     const originalSender = await createTestKeyPair(0);
     const recipient = await createTestKeyPair(1);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('secret', '/secret.txt');
+    const file = await createFileInput("secret", "/secret.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: originalSender,
         recipients: [{ publicKey: recipient.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Attacker tries with a different sender key
@@ -392,8 +395,8 @@ describe('getManifest - sender verification', () => {
         ipfsClient,
         recipientKeyPair: recipient,
         expectedSenderPublicKey: attacker.publicKey,
-      })
-    ).rejects.toThrow('Sender public key mismatch');
+      }),
+    ).rejects.toThrow("Sender public key mismatch");
   });
 });
 
@@ -401,26 +404,26 @@ describe('getManifest - sender verification', () => {
 // Phase 13: Recipient Matching Tests
 // ============================================================================
 
-describe('getManifest - recipient matching', () => {
-  test('finds correct recipient among multiple recipients', async () => {
+describe("getManifest - recipient matching", () => {
+  test("finds correct recipient among multiple recipients", async () => {
     const sender = await createTestKeyPair(0);
     const recipient1 = await createTestKeyPair(1);
     const recipient2 = await createTestKeyPair(2);
     const recipient3 = await createTestKeyPair(3);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('multi-recipient', '/data.txt');
+    const file = await createFileInput("multi-recipient", "/data.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: [
-          { publicKey: recipient1.publicKey, label: 'Device 1' },
-          { publicKey: recipient2.publicKey, label: 'Device 2' },
-          { publicKey: recipient3.publicKey, label: 'Device 3' },
+          { publicKey: recipient1.publicKey, label: "Device 1" },
+          { publicKey: recipient2.publicKey, label: "Device 2" },
+          { publicKey: recipient3.publicKey, label: "Device 3" },
         ],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Each recipient should be able to retrieve
@@ -434,20 +437,20 @@ describe('getManifest - recipient matching', () => {
     }
   });
 
-  test('throws ManifestError when no matching recipient', async () => {
+  test("throws ManifestError when no matching recipient", async () => {
     const sender = await createTestKeyPair(0);
     const recipient = await createTestKeyPair(1);
     const wrongRecipient = await createTestKeyPair(99);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: [{ publicKey: recipient.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     await expect(
@@ -455,7 +458,7 @@ describe('getManifest - recipient matching', () => {
         ipfsClient,
         recipientKeyPair: wrongRecipient, // not a recipient
         expectedSenderPublicKey: sender.publicKey,
-      })
+      }),
     ).rejects.toThrow(ManifestError);
 
     await expect(
@@ -463,8 +466,8 @@ describe('getManifest - recipient matching', () => {
         ipfsClient,
         recipientKeyPair: wrongRecipient,
         expectedSenderPublicKey: sender.publicKey,
-      })
-    ).rejects.toThrow('No matching recipient found');
+      }),
+    ).rejects.toThrow("No matching recipient found");
   });
 });
 
@@ -472,20 +475,20 @@ describe('getManifest - recipient matching', () => {
 // Phase 13: Sub-manifest Handling Tests
 // ============================================================================
 
-describe('getManifest - sub-manifests', () => {
-  test('handles manifest with no sub-manifests (files in root only)', async () => {
+describe("getManifest - sub-manifests", () => {
+  test("handles manifest with no sub-manifests (files in root only)", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Small batch - no sub-manifests
-    const file = await createFileInput('small', '/small.txt');
+    const file = await createFileInput("small", "/small.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(result.cid, {
@@ -495,7 +498,7 @@ describe('getManifest - sub-manifests', () => {
     });
 
     expect(manifest.files.length).toBe(1);
-    expect(manifest.files[0]!.path).toBe('/small.txt');
+    expect(manifest.files[0]!.path).toBe("/small.txt");
   });
 
   // Note: Testing actual sub-manifest splitting requires creating a batch with
@@ -507,82 +510,89 @@ describe('getManifest - sub-manifests', () => {
 // Phase 13: Error Handling Tests
 // ============================================================================
 
-describe('getManifest - error handling', () => {
-  test('throws ValidationError for empty batchCid', async () => {
+describe("getManifest - error handling", () => {
+  test("throws ValidationError for empty batchCid", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     await expect(
-      getManifest('', {
+      getManifest("", {
         ipfsClient,
         recipientKeyPair: keyPair,
         expectedSenderPublicKey: keyPair.publicKey,
-      })
+      }),
     ).rejects.toThrow(ValidationError);
 
     await expect(
-      getManifest('', {
+      getManifest("", {
         ipfsClient,
         recipientKeyPair: keyPair,
         expectedSenderPublicKey: keyPair.publicKey,
-      })
-    ).rejects.toThrow('batchCid must be a non-empty string');
+      }),
+    ).rejects.toThrow("batchCid must be a non-empty string");
   });
 
-  test('throws ValidationError for whitespace-only batchCid', async () => {
+  test("throws ValidationError for whitespace-only batchCid", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     await expect(
-      getManifest('   ', {
+      getManifest("   ", {
         ipfsClient,
         recipientKeyPair: keyPair,
         expectedSenderPublicKey: keyPair.publicKey,
-      })
+      }),
     ).rejects.toThrow(ValidationError);
   });
 
-  test('throws ManifestError when manifest not found', async () => {
+  test("throws ManifestError when manifest not found", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Non-existent CID
     await expect(
-      getManifest('bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi', {
-        ipfsClient,
-        recipientKeyPair: keyPair,
-        expectedSenderPublicKey: keyPair.publicKey,
-      })
+      getManifest(
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+        {
+          ipfsClient,
+          recipientKeyPair: keyPair,
+          expectedSenderPublicKey: keyPair.publicKey,
+        },
+      ),
     ).rejects.toThrow(ManifestError);
 
     await expect(
-      getManifest('bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi', {
-        ipfsClient,
-        recipientKeyPair: keyPair,
-        expectedSenderPublicKey: keyPair.publicKey,
-      })
-    ).rejects.toThrow('Failed to fetch manifest');
+      getManifest(
+        "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+        {
+          ipfsClient,
+          recipientKeyPair: keyPair,
+          expectedSenderPublicKey: keyPair.publicKey,
+        },
+      ),
+    ).rejects.toThrow("Failed to fetch manifest");
   });
 
-  test('throws ManifestError for corrupted envelope bytes', async () => {
+  test("throws ManifestError for corrupted envelope bytes", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Upload a valid batch first
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Corrupt the manifest by replacing it with garbage
     // Access internal blocks directly
-    const blocks = (ipfsClient as unknown as { blocks: Map<string, Uint8Array> })
-      .blocks;
+    const blocks =
+      (ipfsClient as unknown as { blocks: Map<string, Uint8Array> })
+        .blocks;
 
     // Find and corrupt a manifest block by adding garbage
     for (const [cid, data] of blocks.entries()) {
@@ -597,11 +607,12 @@ describe('getManifest - error handling', () => {
     // which may not be stable. Skip if it doesn't work as expected.
   });
 
-  test('ManifestError includes batchCid for context', async () => {
+  test("ManifestError includes batchCid for context", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const testCid = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    const testCid =
+      "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
 
     try {
       await getManifest(testCid, {
@@ -609,7 +620,7 @@ describe('getManifest - error handling', () => {
         recipientKeyPair: keyPair,
         expectedSenderPublicKey: keyPair.publicKey,
       });
-      expect.unreachable('Should have thrown');
+      throw new Error("Should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(ManifestError);
       expect((error as ManifestError).batchCid).toBe(testCid);
@@ -621,25 +632,25 @@ describe('getManifest - error handling', () => {
 // Phase 13: Abort Signal Tests
 // ============================================================================
 
-describe('getManifest - abort signal', () => {
-  test('throws AbortError when signal already aborted at start', async () => {
+describe("getManifest - abort signal", () => {
+  test("throws AbortError when signal already aborted at start", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Upload a batch
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Create pre-aborted signal
     const controller = new AbortController();
-    controller.abort('Already cancelled');
+    controller.abort("Already cancelled");
 
     await expect(
       getManifest(result.cid, {
@@ -647,7 +658,7 @@ describe('getManifest - abort signal', () => {
         recipientKeyPair: keyPair,
         expectedSenderPublicKey: keyPair.publicKey,
         signal: controller.signal,
-      })
+      }),
     ).rejects.toThrow(DOMException);
 
     try {
@@ -658,26 +669,26 @@ describe('getManifest - abort signal', () => {
         signal: controller.signal,
       });
     } catch (error) {
-      expect((error as DOMException).name).toBe('AbortError');
+      expect((error as DOMException).name).toBe("AbortError");
     }
   });
 
-  test('abort reason is preserved in error message', async () => {
+  test("abort reason is preserved in error message", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('test', '/test.txt');
+    const file = await createFileInput("test", "/test.txt");
     const result = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const controller = new AbortController();
-    controller.abort('User cancelled download');
+    controller.abort("User cancelled download");
 
     try {
       await getManifest(result.cid, {
@@ -687,7 +698,7 @@ describe('getManifest - abort signal', () => {
         signal: controller.signal,
       });
     } catch (error) {
-      expect((error as DOMException).message).toContain('User cancelled');
+      expect((error as DOMException).message).toContain("User cancelled");
     }
   });
 });
@@ -696,21 +707,21 @@ describe('getManifest - abort signal', () => {
 // Phase 13: Round-trip Integration Tests
 // ============================================================================
 
-describe('getManifest - round-trip integration', () => {
-  test('upload -> getManifest produces identical manifest data', async () => {
+describe("getManifest - round-trip integration", () => {
+  test("upload -> getManifest produces identical manifest data", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const file1 = await createFileInput('File A content', '/docs/a.txt');
-    const file2 = await createFileInput('File B content', '/docs/b.txt');
+    const file1 = await createFileInput("File A content", "/docs/a.txt");
+    const file2 = await createFileInput("File B content", "/docs/b.txt");
     const uploadResult = await uploadBatch(
       asAsyncIterable([file1, file2]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
-        directories: [{ path: '/empty-dir' }],
+        directories: [{ path: "/empty-dir" }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const retrievedManifest = await getManifest(uploadResult.cid, {
@@ -721,16 +732,18 @@ describe('getManifest - round-trip integration', () => {
 
     // Compare with upload result manifest
     expect(retrievedManifest.cid).toBe(uploadResult.manifest.cid);
-    expect(retrievedManifest.files.length).toBe(uploadResult.manifest.files.length);
+    expect(retrievedManifest.files.length).toBe(
+      uploadResult.manifest.files.length,
+    );
     expect(retrievedManifest.directories.length).toBe(
-      uploadResult.manifest.directories.length
+      uploadResult.manifest.directories.length,
     );
     expect(retrievedManifest.created).toBe(uploadResult.manifest.created);
 
     // Compare file details
     for (const uploadedFile of uploadResult.manifest.files) {
       const retrievedFile = retrievedManifest.files.find(
-        (f) => f.path === uploadedFile.path
+        (f) => f.path === uploadedFile.path,
       );
       expect(retrievedFile).toBeDefined();
       expect(retrievedFile!.size).toBe(uploadedFile.size);
@@ -739,7 +752,7 @@ describe('getManifest - round-trip integration', () => {
     }
   });
 
-  test('upload with multiple recipients -> each can retrieve', async () => {
+  test("upload with multiple recipients -> each can retrieve", async () => {
     const sender = await createTestKeyPair(0);
     const recipients = await Promise.all([
       createTestKeyPair(1),
@@ -748,14 +761,14 @@ describe('getManifest - round-trip integration', () => {
     ]);
     const ipfsClient = new MockIpfsClient();
 
-    const file = await createFileInput('shared content', '/shared.txt');
+    const file = await createFileInput("shared content", "/shared.txt");
     const uploadResult = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: sender,
         recipients: recipients.map((r) => ({ publicKey: r.publicKey })),
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Each recipient should retrieve identical manifest
@@ -766,30 +779,30 @@ describe('getManifest - round-trip integration', () => {
           recipientKeyPair: recipient,
           expectedSenderPublicKey: sender.publicKey,
         })
-      )
+      ),
     );
 
     // All manifests should have same data
     for (const manifest of manifests) {
       expect(manifest.cid).toBe(uploadResult.cid);
       expect(manifest.files.length).toBe(1);
-      expect(manifest.files[0]!.path).toBe('/shared.txt');
+      expect(manifest.files[0]!.path).toBe("/shared.txt");
     }
   });
 
-  test('retrieved manifestKey enables file download', async () => {
+  test("retrieved manifestKey enables file download", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
-    const originalContent = 'This is the original file content for testing';
-    const file = await createFileInput(originalContent, '/download-test.txt');
+    const originalContent = "This is the original file content for testing";
+    const file = await createFileInput(originalContent, "/download-test.txt");
     const uploadResult = await uploadBatch(
       asAsyncIterable([file]),
       {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     // Retrieve manifest
@@ -803,19 +816,19 @@ describe('getManifest - round-trip integration', () => {
     const fileInfo = manifest.files[0]!;
     const fileKey = await deriveFileKey(
       manifest.manifestKey,
-      fileInfo.contentHash
+      fileInfo.contentHash,
     );
 
     // Fetch chunk and decrypt
     const chunkRef = fileInfo.chunks[0]!;
     const chunkPath = chunkIdToPath(asChunkId(chunkRef.chunkId));
     const encryptedChunk = await collectBytes(
-      ipfsClient.cat(manifest.cid, `/${chunkPath}`)
+      ipfsClient.cat(manifest.cid, `/${chunkPath}`),
     );
 
     const segmentBytes = encryptedChunk.slice(
       chunkRef.offset,
-      chunkRef.offset + chunkRef.encryptedLength
+      chunkRef.offset + chunkRef.encryptedLength,
     );
     const decrypted = await decryptSingleShot(segmentBytes, fileKey);
     const trimmed = decrypted.slice(0, chunkRef.length);
@@ -824,20 +837,21 @@ describe('getManifest - round-trip integration', () => {
     expect(downloadedContent).toBe(originalContent);
   });
 
-  test('handles batch with empty files', async () => {
+  test("handles batch with empty files", async () => {
     const keyPair = await createTestKeyPair(0);
     const ipfsClient = new MockIpfsClient();
 
     // Create empty file
     const emptyFile: StreamingFileInput = {
-      path: '/empty.txt',
+      path: "/empty.txt",
       contentHash: await hashBytes(new Uint8Array(0)),
       size: 0,
-      getStream: () => new ReadableStream({
-        start(controller) {
-          controller.close();
-        }
-      }),
+      getStream: () =>
+        new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
     };
 
     const uploadResult = await uploadBatch(
@@ -846,7 +860,7 @@ describe('getManifest - round-trip integration', () => {
         senderKeyPair: keyPair,
         recipients: [{ publicKey: keyPair.publicKey }],
       },
-      ipfsClient
+      ipfsClient,
     );
 
     const manifest = await getManifest(uploadResult.cid, {

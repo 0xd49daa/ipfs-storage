@@ -1,0 +1,56 @@
+{
+  "name": "@0xd49daa/ipfs-storage",
+  "version": "0.1.2",
+  "description": "Browser-first TypeScript library for IPFS-based encrypted batch storage",
+  "license": "MIT",
+  "exports": "./src/index.ts",
+  "imports": {
+    "@0xd49daa/safecrypt": "jsr:@0xd49daa/safecrypt@^0.1.4",
+    "@bufbuild/protobuf": "npm:@bufbuild/protobuf@2.10.1",
+    "@bufbuild/protobuf/codegenv2": "npm:@bufbuild/protobuf@2.10.1/codegenv2",
+    "@ipld/car": "npm:@ipld/car@5.3.3",
+    "@ipld/dag-pb": "npm:@ipld/dag-pb@4.1.5",
+    "@ipld/unixfs": "npm:@ipld/unixfs@3.0.0",
+    "@scure/base": "npm:@scure/base@1.2.1",
+    "multiformats/cid": "npm:multiformats@13.3.1/cid",
+    "multiformats/codecs/raw": "npm:multiformats@13.3.1/codecs/raw",
+    "multiformats/hashes/sha2": "npm:multiformats@13.3.1/hashes/sha2",
+    "@std/expect": "jsr:@std/expect@1.0.19",
+    "@std/testing/bdd": "jsr:@std/testing@1.0.17/bdd"
+  },
+  "tasks": {
+    "test": "deno test src",
+    "test:e2e": "deno test --allow-net --allow-env e2e",
+    "typecheck": "deno check src/index.ts",
+    "publish:dry": "deno publish --dry-run --allow-dirty"
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-unused-vars",
+        "prefer-const",
+        "require-await",
+        "verbatim-module-syntax"
+      ]
+    }
+  },
+  "publish": {
+    "include": [
+      "README.md",
+      "REFERENCE.md",
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "src/**/*.test.ts",
+      "src/examples/**"
+    ]
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true
+  }
+}

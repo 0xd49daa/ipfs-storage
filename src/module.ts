@@ -5,37 +5,37 @@
  * This is the main entry point for the public API.
  */
 
-import { ValidationError } from './errors.ts';
-import { uploadBatch as uploadBatchImpl } from './streaming-upload.ts';
-import { getManifest as getManifestImpl } from './manifest-retrieval.ts';
-import { downloadFile as downloadFileImpl } from './download.ts';
-import { downloadFiles as downloadFilesImpl } from './download-files.ts';
-import type { IpfsClient } from './ipfs-client.ts';
+import { ValidationError } from "./errors.ts";
+import { uploadBatch as uploadBatchImpl } from "./streaming-upload.ts";
+import { getManifest as getManifestImpl } from "./manifest-retrieval.ts";
+import { downloadFile as downloadFileImpl } from "./download.ts";
+import { downloadFiles as downloadFilesImpl } from "./download-files.ts";
+import type { IpfsClient } from "./ipfs-client.ts";
 import type {
+  BatchManifest,
+  BatchResult,
+  DownloadedFile,
+  DownloadFilesOptions,
+  DownloadOptions,
+  FileDownloadRef,
   IpfsStorageConfig,
   IpfsStorageModule,
   ReadOptions,
   StreamingFileInput,
   UploadOptions,
-  BatchResult,
-  FileDownloadRef,
-  DownloadOptions,
-  DownloadFilesOptions,
-  DownloadedFile,
-  BatchManifest,
-} from './types.ts';
+} from "./types.ts";
 
 /**
  * Validates the configuration object.
  * @throws ValidationError if config is invalid
  */
 function validateConfig(config: IpfsStorageConfig): void {
-  if (!config || typeof config !== 'object') {
-    throw new ValidationError('Config must be an object');
+  if (!config || typeof config !== "object") {
+    throw new ValidationError("Config must be an object");
   }
 
   if (!config.ipfsClient) {
-    throw new ValidationError('ipfsClient is required');
+    throw new ValidationError("ipfsClient is required");
   }
 }
 
@@ -61,7 +61,7 @@ function validateConfig(config: IpfsStorageConfig): void {
  * ```
  */
 export function createIpfsStorageModule(
-  config: IpfsStorageConfig
+  config: IpfsStorageConfig,
 ): IpfsStorageModule {
   validateConfig(config);
 
@@ -70,12 +70,15 @@ export function createIpfsStorageModule(
   return {
     uploadBatch(
       files: AsyncIterable<StreamingFileInput>,
-      options: UploadOptions
+      options: UploadOptions,
     ): Promise<BatchResult> {
       return uploadBatchImpl(files, options, ipfsClient);
     },
 
-    getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest> {
+    getManifest(
+      batchCid: string,
+      options: ReadOptions,
+    ): Promise<BatchManifest> {
       return getManifestImpl(batchCid, {
         ipfsClient,
         recipientKeyPair: options.recipientKeyPair,
@@ -86,14 +89,14 @@ export function createIpfsStorageModule(
 
     downloadFile(
       file: FileDownloadRef,
-      options?: DownloadOptions
+      options?: DownloadOptions,
     ): AsyncIterable<Uint8Array> {
       return downloadFileImpl(file, options, ipfsClient);
     },
 
     downloadFiles(
       files: FileDownloadRef[],
-      options?: DownloadFilesOptions
+      options?: DownloadFilesOptions,
     ): AsyncIterable<DownloadedFile> {
       return downloadFilesImpl(files, options, ipfsClient);
     },
