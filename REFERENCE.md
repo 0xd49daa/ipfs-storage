@@ -78,7 +78,12 @@ interface IpfsStorageModule {
 
   downloadFile(
     file: FileDownloadRef,
-    options: DownloadOptions,
+    options: DownloadOptions & { output: "memory" },
+  ): Promise<Uint8Array>;
+
+  downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions & { output?: undefined },
   ): AsyncIterable<Uint8Array>;
 
   downloadFiles(
@@ -395,16 +400,23 @@ function downloadFile(
 
 function downloadFile(
   file: FileDownloadRef,
-  options: DownloadOptions,
+  options: DownloadOptions & { output: "memory" },
+  ipfsClient: IpfsClient,
+): Promise<Uint8Array>;
+
+function downloadFile(
+  file: FileDownloadRef,
+  options: DownloadOptions & { output?: undefined },
   ipfsClient: IpfsClient,
 ): AsyncIterable<Uint8Array>;
 ```
 
 Most consumers call `module.downloadFile(file, options)`.
 
-If `options.output` is provided, decrypted bytes are written to the caller-owned
-`WritableStream` and the function returns `Promise<void>`. Without `output`, it
-returns `AsyncIterable<Uint8Array>`.
+Without `output`, the function returns `AsyncIterable<Uint8Array>`. With
+`output: 'memory'`, it returns `Promise<Uint8Array>`. With a caller-owned
+`WritableStream`, decrypted bytes are written to that stream and the function
+returns `Promise<void>`; the stream is closed on success and aborted on failure.
 
 Throws:
 
@@ -415,7 +427,10 @@ Throws:
 
 ### downloadFiles(files, options)
 
-Downloads and decrypts multiple files sequentially to bound memory use.
+Downloads and decrypts multiple files sequentially as a convenience API. For
+large files, prefer `downloadFile()` with a caller-owned `WritableStream`
+because `downloadFiles()` yields each `DownloadedFile` after that file has
+completed.
 
 ```typescript
 function downloadFiles(
@@ -452,7 +467,7 @@ interface DownloadOptions {
   onProgress?: DownloadProgressCallback;
   integrityMode?: "strict" | "warn";
   onIntegrityError?: (error: IntegrityError) => void;
-  output?: WritableStream<Uint8Array>;
+  output?: "memory" | WritableStream<Uint8Array>;
 }
 ```
 
@@ -467,7 +482,7 @@ Fields:
 | `onProgress`       | Single-file progress callback                                  |
 | `integrityMode`    | `strict` throws on hash mismatch; `warn` reports and continues |
 | `onIntegrityError` | Callback used in `warn` mode                                   |
-| `output`           | Optional caller-owned stream sink for decrypted bytes          |
+| `output`           | Optional `'memory'` result or caller-owned stream sink         |
 
 ### DownloadFilesOptions
 
@@ -580,8 +595,9 @@ hash.
 ### Plaintext Handling
 
 The library never writes plaintext files, OPFS caches, or temporary decrypted
-files. Decrypted bytes are returned to the caller as an async iterable or
-written to the caller-supplied `WritableStream` in `DownloadOptions.output`.
+files. Decrypted bytes are returned to the caller as an async iterable,
+collected into memory with `output: 'memory'`, or written to the caller-supplied
+`WritableStream` in `DownloadOptions.output`.
 
 ---
 
@@ -694,6 +710,12 @@ enum ChunkEncryption {
 
 The current Vault AEAD implementation emits `SINGLE_SHOT` records for encrypted
 segments. The enum remains part of the manifest type surface.
+
+### DownloadOutput
+
+```typescript
+type DownloadOutput = "memory" | WritableStream<Uint8Array>;
+```
 
 ### Callback Types
 

@@ -343,12 +343,12 @@ describe("Vault AEAD crypto foundation", () => {
       ).rejects.toThrow(/Forbidden AES-GCM nonce value/);
     });
 
-    test("uses fresh random nonces across many encryptions", async () => {
+    test("uses fresh random nonces across 10,000 encryptions", async () => {
       const key = randomBytes(VAULT_AES_256_KEY_SIZE);
       const batchId = rangeBytes(16);
       const nonceHexes = new Set<string>();
 
-      for (let i = 0; i < 64; i++) {
+      for (let i = 0; i < 10_000; i++) {
         const record = await encryptVaultManifestRecord({
           plaintext: new Uint8Array([i]),
           manifestKey: key,
@@ -359,9 +359,40 @@ describe("Vault AEAD crypto foundation", () => {
         nonceHexes.add(bytesToHex(parsed.nonce));
       }
 
-      expect(nonceHexes.size).toBe(64);
+      expect(nonceHexes.size).toBe(10_000);
       expect(nonceHexes.has("000000000000000000000000")).toBe(false);
       expect(nonceHexes.has("ffffffffffffffffffffffff")).toBe(false);
+    });
+
+    test("rejects forbidden nonce values when parsing records", async () => {
+      const key = randomBytes(VAULT_AES_256_KEY_SIZE);
+      const batchId = rangeBytes(16);
+      const record = await encryptVaultManifestRecord({
+        plaintext: new Uint8Array([1, 2, 3]),
+        manifestKey: key,
+        batchId,
+        manifestNodeId: 0,
+      });
+
+      const zeroNonce = record.slice();
+      zeroNonce.fill(0x00, 2, 2 + VAULT_AEAD_NONCE_SIZE);
+      expect(() => parseVaultAeadRecord(zeroNonce)).toThrow(
+        /Forbidden AES-GCM nonce value/,
+      );
+      await expect(
+        decryptVaultManifestRecord({
+          record: zeroNonce,
+          manifestKey: key,
+          batchId,
+          manifestNodeId: 0,
+        }),
+      ).rejects.toThrow(/Forbidden AES-GCM nonce value/);
+
+      const onesNonce = record.slice();
+      onesNonce.fill(0xff, 2, 2 + VAULT_AEAD_NONCE_SIZE);
+      expect(() => parseVaultAeadRecord(onesNonce)).toThrow(
+        /Forbidden AES-GCM nonce value/,
+      );
     });
   });
 

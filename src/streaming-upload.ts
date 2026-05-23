@@ -661,34 +661,59 @@ async function processLargeFile(
   let remainingSize = file.size;
   let chunkIndex = 0;
 
-  // Buffer for accumulating stream data into CHUNK_SIZE pieces
-  let buffer = new Uint8Array(0);
+  let carry: Uint8Array | null = null;
+  let carryOffset = 0;
+
+  async function readNextChunk(size: number): Promise<Uint8Array> {
+    const result = new Uint8Array(size);
+    let written = 0;
+
+    while (written < size) {
+      checkAbort(context.signal);
+
+      if (carry && carryOffset < carry.length) {
+        const available = carry.length - carryOffset;
+        const take = Math.min(size - written, available);
+        result.set(carry.subarray(carryOffset, carryOffset + take), written);
+        carryOffset += take;
+        written += take;
+
+        if (carryOffset >= carry.length) {
+          carry = null;
+          carryOffset = 0;
+        }
+        continue;
+      }
+
+      const { done, value } = await iterator.next();
+      if (done) break;
+      if (!value || value.length === 0) continue;
+
+      const take = Math.min(size - written, value.length);
+      result.set(value.subarray(0, take), written);
+      written += take;
+
+      if (take < value.length) {
+        carry = value;
+        carryOffset = take;
+      }
+    }
+
+    return written === size ? result : result.slice(0, written);
+  }
 
   while (remainingSize > 0) {
     checkAbort(context.signal);
 
     const chunkDataSize = Math.min(CHUNK_SIZE, remainingSize);
-    const isFinalChunk = chunkDataSize === remainingSize;
-
-    // Read chunk data from stream (may need to accumulate)
-    while (buffer.length < chunkDataSize) {
-      const { done, value } = await iterator.next();
-      if (done) break;
-      if (!value) continue;
-
-      // Append to buffer
-      const newBuffer = new Uint8Array(buffer.length + value.length);
-      newBuffer.set(buffer, 0);
-      newBuffer.set(value, buffer.length);
-      buffer = newBuffer;
+    const chunkData = await readNextChunk(chunkDataSize);
+    if (chunkData.length !== chunkDataSize) {
+      throw new ValidationError(
+        `Stream size mismatch for ${resolvedPath}: expected ${file.size} bytes, got ${
+          fileOffset + chunkData.length
+        }`,
+      );
     }
-
-    // Extract chunk data
-    let chunkData = buffer.subarray(0, chunkDataSize);
-    buffer = buffer.subarray(chunkDataSize);
-
-    // Apply PADME to final chunk of final file (handled by caller knowing it's last file)
-    // For now, we don't apply PADME here - it's applied in the main loop when we know it's the last file
 
     checkAbort(context.signal);
 
@@ -750,6 +775,11 @@ async function processLargeFile(
     fileOffset += chunkData.length;
     remainingSize -= chunkData.length;
     chunkIndex++;
+  }
+
+  const remainingCarry = carry as Uint8Array | null;
+  if (remainingCarry && carryOffset < remainingCarry.length) {
+    throw new ValidationError(`Stream exceeded expected size: ${file.size}`);
   }
 
   return chunkRefs;

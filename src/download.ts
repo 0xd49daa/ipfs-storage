@@ -11,7 +11,14 @@ import {
   hashContent,
 } from "./crypto-primitives.ts";
 import type { IpfsClient } from "./ipfs-client.ts";
-import type { ChunkRef, DownloadOptions, FileDownloadRef } from "./types.ts";
+import type {
+  ChunkRef,
+  DownloadMemoryOptions,
+  DownloadOptions,
+  DownloadStreamOptions,
+  DownloadWritableOptions,
+  FileDownloadRef,
+} from "./types.ts";
 import { chunkIdToPath } from "./chunk-id.ts";
 import { unsafe } from "./branded.ts";
 import {
@@ -101,6 +108,15 @@ function validateDownloadOptions(options: DownloadOptions | undefined): void {
   if (options.manifestKey.length !== VAULT_AES_256_KEY_SIZE) {
     throw new ValidationError(
       `manifestKey must be ${VAULT_AES_256_KEY_SIZE} bytes, got ${options.manifestKey.length}`,
+    );
+  }
+  const output = options.output;
+  if (
+    output !== undefined && output !== "memory" &&
+    (output === null || typeof output.getWriter !== "function")
+  ) {
+    throw new ValidationError(
+      "output must be 'memory' or a WritableStream<Uint8Array>",
     );
   }
 }
@@ -421,27 +437,51 @@ async function writeDownloadToStream(
     for await (const chunk of iterable) {
       await writer.write(chunk);
     }
+    await writer.close();
+  } catch (error) {
+    await writer.abort(error).catch(() => {});
+    throw error;
   } finally {
     writer.releaseLock();
   }
 }
 
+async function collectDownloadToMemory(
+  iterable: AsyncIterable<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  return collectBytes(iterable, signal);
+}
+
 export function downloadFile(
   ref: FileDownloadRef,
-  options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  options: DownloadWritableOptions,
   ipfsClient: IpfsClient,
 ): Promise<void>;
 export function downloadFile(
   ref: FileDownloadRef,
-  options: DownloadOptions,
+  options: DownloadMemoryOptions,
+  ipfsClient: IpfsClient,
+): Promise<Uint8Array>;
+export function downloadFile(
+  ref: FileDownloadRef,
+  options: DownloadStreamOptions,
   ipfsClient: IpfsClient,
 ): AsyncIterable<Uint8Array>;
 export function downloadFile(
   ref: FileDownloadRef,
   options: DownloadOptions,
   ipfsClient: IpfsClient,
-): AsyncIterable<Uint8Array> | Promise<void> {
+): AsyncIterable<Uint8Array> | Promise<Uint8Array> | Promise<void>;
+export function downloadFile(
+  ref: FileDownloadRef,
+  options: DownloadOptions,
+  ipfsClient: IpfsClient,
+): AsyncIterable<Uint8Array> | Promise<Uint8Array> | Promise<void> {
   const iterable = downloadFileIterable(ref, options, ipfsClient);
+  if (options.output === "memory") {
+    return collectDownloadToMemory(iterable, options.signal);
+  }
   if (options.output) {
     return writeDownloadToStream(iterable, options.output);
   }

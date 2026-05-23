@@ -7,8 +7,8 @@ import { expect } from "@std/expect";
 import {
   type BatchManifest,
   ChunkUnavailableError,
-  type DownloadOptions,
   type DownloadProgress,
+  type DownloadStreamOptions,
   type FileDownloadRef,
   IntegrityError,
   MockIpfsClient,
@@ -327,7 +327,7 @@ describe("downloadFile - basic functionality", () => {
     );
 
     const progressUpdates: DownloadProgress[] = [];
-    const options: DownloadOptions = {
+    const options: DownloadStreamOptions = {
       manifestKey,
       onProgress: (progress) => progressUpdates.push({ ...progress }),
     };
@@ -352,9 +352,13 @@ describe("downloadFile - basic functionality", () => {
 
     const chunks: Uint8Array[] = [];
     const progressUpdates: DownloadProgress[] = [];
+    let closed = false;
     const output = new WritableStream<Uint8Array>({
       write(chunk) {
         chunks.push(chunk.slice());
+      },
+      close() {
+        closed = true;
       },
     });
 
@@ -378,9 +382,58 @@ describe("downloadFile - basic functionality", () => {
     }
 
     expect(downloaded).toEqual(originalContent);
+    expect(closed).toBe(true);
     expect(progressUpdates[progressUpdates.length - 1]!.bytesDownloaded).toBe(
       ref.size,
     );
+  });
+
+  test("returns decrypted bytes when output is memory", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const { ref, originalContent } = await uploadAndGetRef(
+      "keep me in memory",
+      "/memory.txt",
+      ipfsClient,
+    );
+
+    const downloaded = await downloadFile(
+      ref,
+      {
+        manifestKey,
+        output: "memory",
+      },
+      ipfsClient,
+    );
+
+    expect(downloaded).toEqual(originalContent);
+  });
+
+  test("aborts caller WritableStream when download fails before completion", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const { ref } = await uploadAndGetRef(
+      "secret stream",
+      "/stream-failure.txt",
+      ipfsClient,
+    );
+    const wrongKey = new Uint8Array(32).fill(9) as typeof manifestKey;
+    let abortReason: unknown;
+    const output = new WritableStream<Uint8Array>({
+      abort(reason) {
+        abortReason = reason;
+      },
+    });
+
+    await expect(
+      downloadFile(
+        ref,
+        {
+          manifestKey: wrongKey,
+          output,
+        },
+        ipfsClient,
+      ),
+    ).rejects.toThrow();
+    expect(abortReason).toBeDefined();
   });
 });
 

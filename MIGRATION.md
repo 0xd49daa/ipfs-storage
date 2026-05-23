@@ -8,7 +8,8 @@ public documentation and should not be used by consumers.
 
 ### Breaking Changes
 
-- `uploadBatch()` requires `manifestKey: SymmetricKey` and `batch_id: Uint8Array`.
+- `uploadBatch()` requires `manifestKey: SymmetricKey` and
+  `batch_id: Uint8Array`.
 - `batch_id` must be exactly 16 bytes and should be random per batch.
 - `manifestKey` must be exactly 32 bytes and is owned by the caller.
 - `getManifest()` requires `manifestKey` instead of recipient key material.
@@ -63,13 +64,23 @@ const fileRef = {
 for await (const chunk of storage.downloadFile(fileRef, { manifestKey })) {
   // ...
 }
+
+const bytes = await storage.downloadFile(fileRef, {
+  manifestKey,
+  output: "memory",
+});
+
+await storage.downloadFile(fileRef, {
+  manifestKey,
+  output: writableStream,
+});
 ```
 
 ### Root Manifest Locator
 
-The root manifest blob at `/m` starts with a plaintext 16-byte `batch_id` prefix,
-followed by the encrypted root manifest AEAD record. Consumers that need to read
-the locator without decrypting the manifest can use:
+The root manifest blob at `/m` starts with a plaintext 16-byte `batch_id`
+prefix, followed by the encrypted root manifest AEAD record. Consumers that need
+to read the locator without decrypting the manifest can use:
 
 ```typescript
 import { getBatchIdFromManifestBlob } from "@0xd49daa/ipfs-storage";
@@ -83,5 +94,6 @@ remaining bytes.
 ### Plaintext Handling
 
 The library still does not write plaintext files, OPFS caches, or temporary
-decrypted files. Downloads yield decrypted bytes to the caller or write them to a
-caller-owned `WritableStream`.
+decrypted files. Downloads yield decrypted bytes to the caller, return an
+in-memory `Uint8Array` when requested, or write them to a caller-owned
+`WritableStream`.

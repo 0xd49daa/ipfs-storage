@@ -10,8 +10,6 @@ import {
   FileChunkSchema,
   type FileRecord,
   FileRecordSchema,
-  type ManifestEnvelope,
-  ManifestEnvelopeSchema,
   type RootManifest,
   RootManifestSchema,
   type SubManifest,
@@ -24,7 +22,6 @@ import type {
   ChunkRef,
   DirectoryInfo,
   FileInfo,
-  ManifestEnvelopeData,
   RootManifestData,
   SubManifestData,
   SubManifestIndexEntry,
@@ -50,16 +47,6 @@ function bigintToNumber(value: bigint, fieldName: string): number {
 // ============================================================================
 // Encoding Functions
 // ============================================================================
-
-/**
- * Encode ManifestEnvelopeData to binary protobuf.
- */
-export function encodeManifestEnvelope(data: ManifestEnvelopeData): Uint8Array {
-  const envelope = create(ManifestEnvelopeSchema, {
-    encryptedManifest: data.encryptedManifest,
-  });
-  return toBinary(ManifestEnvelopeSchema, envelope);
-}
 
 /**
  * Encode RootManifestData to binary protobuf.
@@ -89,18 +76,6 @@ export function encodeSubManifest(data: SubManifestData): Uint8Array {
 // ============================================================================
 // Decoding Functions
 // ============================================================================
-
-/**
- * Decode binary protobuf to ManifestEnvelopeData.
- */
-export function decodeManifestEnvelope(
-  bytes: Uint8Array,
-): ManifestEnvelopeData {
-  const envelope = fromBinary(ManifestEnvelopeSchema, bytes);
-  return {
-    encryptedManifest: envelope.encryptedManifest,
-  };
-}
 
 /**
  * Decode binary protobuf to RootManifestData.

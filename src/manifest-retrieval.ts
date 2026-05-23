@@ -37,7 +37,7 @@ function checkAbort(signal?: AbortSignal): void {
  *
  * Note: This buffers the entire content in memory. For manifests this is acceptable
  * since they're typically < 1MB (split threshold). Streaming decryption would require
- * architectural changes since XChaCha20-Poly1305 needs the full ciphertext for auth.
+ * architectural changes since AES-GCM authentication needs the full record.
  */
 async function collectBytes(
   iterable: AsyncIterable<Uint8Array>,

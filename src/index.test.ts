@@ -8,25 +8,12 @@ import {
   ManifestError,
   ValidationError,
 } from "./index.ts";
-import { CHUNK_SIZE, DOMAIN } from "./constants.ts";
-import { deriveFileKey } from "./crypto.ts";
+import { CHUNK_SIZE } from "./constants.ts";
 import { asBatchCid, asChunkId, asFilePath } from "./branded.ts";
-import {
-  generateSymmetricKey as generateKey,
-  hashContent,
-} from "./crypto-primitives.ts";
+import { hashContent } from "./crypto-primitives.ts";
 
 describe("Phase 0: Foundation", () => {
   describe("constants", () => {
-    test("DOMAIN.FILE_KEY is correct", () => {
-      expect(DOMAIN.FILE_KEY).toBe("ipfs-storage:file-key:v1");
-    });
-
-    test("DOMAIN.FILE_KEY encodes to 24 bytes UTF-8", () => {
-      const encoded = new TextEncoder().encode(DOMAIN.FILE_KEY);
-      expect(encoded.length).toBe(24);
-    });
-
     test("CHUNK_SIZE is 16 MiB", () => {
       expect(CHUNK_SIZE).toBe(16 * 1024 * 1024);
     });
@@ -110,49 +97,6 @@ describe("Phase 0: Foundation", () => {
       const err = new CidMismatchError("expected-cid", "actual-cid");
       expect(err.expected).toBe("expected-cid");
       expect(err.actual).toBe("actual-cid");
-    });
-  });
-
-  describe("deriveFileKey", () => {
-    test("produces deterministic output for same inputs", async () => {
-      const manifestKey = await generateKey();
-      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
-
-      const key1 = await deriveFileKey(manifestKey, contentHash);
-      const key2 = await deriveFileKey(manifestKey, contentHash);
-
-      expect(key1).toEqual(key2);
-    });
-
-    test("produces different output for different content hashes", async () => {
-      const manifestKey = await generateKey();
-      const hash1 = await hashContent(new Uint8Array([1, 2, 3]));
-      const hash2 = await hashContent(new Uint8Array([4, 5, 6]));
-
-      const key1 = await deriveFileKey(manifestKey, hash1);
-      const key2 = await deriveFileKey(manifestKey, hash2);
-
-      expect(key1).not.toEqual(key2);
-    });
-
-    test("produces different output for different manifest keys", async () => {
-      const manifestKey1 = await generateKey();
-      const manifestKey2 = await generateKey();
-      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
-
-      const key1 = await deriveFileKey(manifestKey1, contentHash);
-      const key2 = await deriveFileKey(manifestKey2, contentHash);
-
-      expect(key1).not.toEqual(key2);
-    });
-
-    test("produces 32-byte key", async () => {
-      const manifestKey = await generateKey();
-      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
-
-      const fileKey = await deriveFileKey(manifestKey, contentHash);
-
-      expect(fileKey.length).toBe(32);
     });
   });
 });

@@ -12,7 +12,7 @@ export class IpfsStorageError extends Error {
 
 /**
  * Validation error for invalid inputs.
- * Thrown for: empty batch, invalid path format, no recipients, etc.
+ * Thrown for: empty batch, invalid path format, invalid keys, etc.
  */
 export class ValidationError extends IpfsStorageError {
   constructor(message: string) {

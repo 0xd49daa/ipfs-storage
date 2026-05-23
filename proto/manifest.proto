@@ -2,12 +2,6 @@ syntax = "proto3";
 
 package filemanager.ipfsstorage.v1;
 
-// Encrypted root manifest envelope
-message ManifestEnvelope {
-  // Encrypted RootManifest bytes
-  bytes encrypted_manifest = 1;
-}
-
 // Root manifest containing directory structure and file index
 message RootManifest {
   // All directories in the batch

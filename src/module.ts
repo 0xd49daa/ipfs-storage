@@ -16,7 +16,10 @@ import type {
   BatchResult,
   DownloadedFile,
   DownloadFilesOptions,
+  DownloadMemoryOptions,
   DownloadOptions,
+  DownloadStreamOptions,
+  DownloadWritableOptions,
   FileDownloadRef,
   IpfsStorageConfig,
   IpfsStorageModule,
@@ -69,16 +72,24 @@ export function createIpfsStorageModule(
 
   function downloadFile(
     file: FileDownloadRef,
-    options: DownloadOptions & { output: WritableStream<Uint8Array> },
+    options: DownloadWritableOptions,
   ): Promise<void>;
   function downloadFile(
     file: FileDownloadRef,
-    options: DownloadOptions,
+    options: DownloadMemoryOptions,
+  ): Promise<Uint8Array>;
+  function downloadFile(
+    file: FileDownloadRef,
+    options: DownloadStreamOptions,
   ): AsyncIterable<Uint8Array>;
   function downloadFile(
     file: FileDownloadRef,
     options: DownloadOptions,
-  ): AsyncIterable<Uint8Array> | Promise<void> {
+  ): AsyncIterable<Uint8Array> | Promise<Uint8Array> | Promise<void>;
+  function downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
+  ): AsyncIterable<Uint8Array> | Promise<Uint8Array> | Promise<void> {
     return downloadFileImpl(file, options, ipfsClient);
   }
 

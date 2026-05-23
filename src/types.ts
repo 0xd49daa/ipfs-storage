@@ -146,14 +146,6 @@ export interface SubManifestData {
   files: FileInfo[];
 }
 
-/**
- * Manifest envelope containing encrypted root manifest bytes.
- */
-export interface ManifestEnvelopeData {
-  /** Encrypted manifest bytes */
-  encryptedManifest: Uint8Array;
-}
-
 // ============================================================================
 // Upload Types (Phase 10)
 // ============================================================================
@@ -330,6 +322,8 @@ export interface FileDownloadRef {
  * Options for single file download.
  * Matches spec exactly - ipfsClient is passed as separate param to downloadFile().
  */
+export type DownloadOutput = "memory" | WritableStream<Uint8Array>;
+
 export interface DownloadOptions {
   /** Caller-derived symmetric manifest key (32 bytes) */
   manifestKey: SymmetricKey;
@@ -345,9 +339,21 @@ export interface DownloadOptions {
   integrityMode?: "strict" | "warn";
   /** Callback for integrity errors in 'warn' mode */
   onIntegrityError?: (error: import("./errors.ts").IntegrityError) => void;
-  /** Caller-owned stream sink for decrypted bytes. No plaintext files/caches are created. */
-  output?: WritableStream<Uint8Array>;
+  /** Optional output mode. Omitted means streaming AsyncIterable output. */
+  output?: DownloadOutput;
 }
+
+export type DownloadMemoryOptions = Omit<DownloadOptions, "output"> & {
+  output: "memory";
+};
+
+export type DownloadWritableOptions = Omit<DownloadOptions, "output"> & {
+  output: WritableStream<Uint8Array>;
+};
+
+export type DownloadStreamOptions = Omit<DownloadOptions, "output"> & {
+  output?: undefined;
+};
 
 /**
  * Download progress callback type.
@@ -506,12 +512,20 @@ export interface IpfsStorageModule {
    */
   downloadFile(
     file: FileDownloadRef,
-    options: DownloadOptions & { output: WritableStream<Uint8Array> },
+    options: DownloadWritableOptions,
   ): Promise<void>;
   downloadFile(
     file: FileDownloadRef,
-    options: DownloadOptions,
+    options: DownloadMemoryOptions,
+  ): Promise<Uint8Array>;
+  downloadFile(
+    file: FileDownloadRef,
+    options: DownloadStreamOptions,
   ): AsyncIterable<Uint8Array>;
+  downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
+  ): AsyncIterable<Uint8Array> | Promise<Uint8Array> | Promise<void>;
 
   /**
    * Download and decrypt multiple files from a batch.

@@ -34,7 +34,9 @@ export function unpadManifestPlaintext(padded: Uint8Array): Uint8Array {
   const plaintextLength = readUint32Be(padded);
   const end = LENGTH_PREFIX_SIZE + plaintextLength;
   if (end > padded.length) {
-    throw new ValidationError("Padded manifest plaintext length exceeds record");
+    throw new ValidationError(
+      "Padded manifest plaintext length exceeds record",
+    );
   }
 
   return padded.slice(LENGTH_PREFIX_SIZE, end);

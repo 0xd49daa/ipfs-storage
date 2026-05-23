@@ -200,10 +200,13 @@ export function parseVaultAeadRecord(record: Uint8Array): VaultAeadRecord {
   const ciphertextStart = nonceStart + VAULT_AEAD_NONCE_SIZE;
   const tagStart = record.length - VAULT_AEAD_TAG_SIZE;
 
+  const nonce = record.slice(nonceStart, ciphertextStart);
+  assertAllowedNonce(nonce);
+
   return {
     version: VAULT_AEAD_VERSION,
     keyScope,
-    nonce: record.slice(nonceStart, ciphertextStart),
+    nonce,
     ciphertext: record.slice(ciphertextStart, tagStart),
     tag: record.slice(tagStart),
   };

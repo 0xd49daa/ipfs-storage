@@ -85,7 +85,7 @@ for await (const chunk of storage.downloadFile(fileRef, { manifestKey })) {
 | `createIpfsStorageModule(config)`     | Create a module instance with a bound IPFS client                 |
 | `module.uploadBatch(files, options)`  | Upload an encrypted file batch using `manifestKey` and `batch_id` |
 | `module.getManifest(cid, options)`    | Retrieve and decrypt the manifest using `manifestKey`             |
-| `module.downloadFile(ref, options)`   | Download and decrypt one file                                     |
+| `module.downloadFile(ref, options)`   | Download and decrypt one file as stream, memory, or sink          |
 | `module.downloadFiles(refs, options)` | Download and decrypt multiple files sequentially                  |
 | `getBatchIdFromManifestBlob(blob)`    | Parse the plaintext `batch_id` prefix from a root manifest blob   |
 | `hashContent(bytes)`                  | Compute the content hash format accepted by this package          |
@@ -144,10 +144,12 @@ rejects unsupported encrypted manifest versions.
 
 The library encrypts data before upload and decrypts data only into caller-owned
 streams. It never writes plaintext files, OPFS caches, or temporary decrypted
-files. `downloadFile()` either yields plaintext chunks as an
-`AsyncIterable<Uint8Array>` or writes them to a caller-supplied
-`WritableStream<Uint8Array>` through `DownloadOptions.output`. If that stream is
-persistent, plaintext persistence is controlled by the caller.
+files. `downloadFile()` yields plaintext chunks as an
+`AsyncIterable<Uint8Array>` by default, returns a `Uint8Array` when
+`output: 'memory'` is set, or writes to a caller-supplied
+`WritableStream<Uint8Array>`. Writable streams are closed on success and aborted
+on failure. If that stream is persistent, plaintext persistence is controlled by
+the caller.
 
 ## Error Handling
 

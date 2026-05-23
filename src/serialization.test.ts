@@ -2,10 +2,8 @@ import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import { create, toBinary } from "@bufbuild/protobuf";
 import {
-  decodeManifestEnvelope,
   decodeRootManifest,
   decodeSubManifest,
-  encodeManifestEnvelope,
   encodeRootManifest,
   encodeSubManifest,
 } from "./serialization.ts";
@@ -14,7 +12,6 @@ import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
 import {
   ChunkEncryption,
   type FileInfo,
-  type ManifestEnvelopeData,
   type RootManifestData,
   type SubManifestData,
 } from "./types.ts";
@@ -32,19 +29,6 @@ async function mockContentHash(): Promise<ContentHash> {
 }
 
 describe("Phase 1: Serialization", () => {
-  describe("ManifestEnvelope", () => {
-    test("round-trip encrypted manifest bytes", () => {
-      const original: ManifestEnvelopeData = {
-        encryptedManifest: new Uint8Array([1, 2, 3, 4, 5]),
-      };
-
-      const encoded = encodeManifestEnvelope(original);
-      const decoded = decodeManifestEnvelope(encoded);
-
-      expect(decoded.encryptedManifest).toEqual(original.encryptedManifest);
-    });
-  });
-
   describe("RootManifest", () => {
     test("round-trip with directories and files", async () => {
       const contentHash = await mockContentHash();
@@ -69,7 +53,7 @@ describe("Phase 1: Serialization", () => {
                 offset: 0,
                 length: 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 1024 * 1024 + 40,
+                encryptedLength: 1024 * 1024 + 30,
               },
             ],
             created: 1700000000000,
@@ -91,7 +75,7 @@ describe("Phase 1: Serialization", () => {
       expect(decoded.files[0]!.size).toBe(1024 * 1024);
       expect(decoded.files[0]!.contentHash).toEqual(contentHash);
       expect(decoded.files[0]!.chunks[0]!.encryptedLength).toBe(
-        1024 * 1024 + 40,
+        1024 * 1024 + 30,
       );
       expect(decoded.files[0]!.chunks.length).toBe(1);
       expect(decoded.files[0]!.chunks[0]!.chunkId).toBe(
@@ -171,7 +155,7 @@ describe("Phase 1: Serialization", () => {
                 offset: 0,
                 length: 16 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 16 * 1024 * 1024 + 40,
+                encryptedLength: 16 * 1024 * 1024 + 30,
               },
               {
                 chunkId: "chunk2chunk2chunk2chun",
@@ -179,7 +163,7 @@ describe("Phase 1: Serialization", () => {
                 offset: 0,
                 length: 9 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 9 * 1024 * 1024 + 40,
+                encryptedLength: 9 * 1024 * 1024 + 30,
               },
               {
                 chunkId: "chunk3chunk3chunk3chun",
@@ -187,7 +171,7 @@ describe("Phase 1: Serialization", () => {
                 offset: 0,
                 length: 5 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 5 * 1024 * 1024 + 40,
+                encryptedLength: 5 * 1024 * 1024 + 30,
               },
             ],
             created: 1700000000000,
@@ -222,7 +206,7 @@ describe("Phase 1: Serialization", () => {
                 offset: 0,
                 length: 100,
                 encryption: ChunkEncryption.STREAMING,
-                encryptedLength: 100 + 24 + 17, // 100 + header + 1 chunk overhead
+                encryptedLength: 130,
               },
             ],
             created: 1700000000000,
@@ -279,7 +263,7 @@ describe("Phase 1: Serialization", () => {
               offset: 0,
               length: 1000 + i,
               encryption: ChunkEncryption.SINGLE_SHOT,
-              encryptedLength: 1000 + i + 40,
+              encryptedLength: 1000 + i + 30,
             },
           ],
           created: 1700000000000 + i,
@@ -345,7 +329,7 @@ describe("Phase 1: Serialization", () => {
               offset: 0,
               length: 100,
               encryption: ChunkEncryption.SINGLE_SHOT,
-              encryptedLength: 140,
+              encryptedLength: 130,
             },
           ],
           created: 1700000000000,
