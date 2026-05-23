@@ -1,4 +1,4 @@
-import type { ContentHash } from "@0xd49daa/safecrypt";
+import type { ContentHash } from "./crypto-primitives.ts";
 
 /**
  * Base error class for all ipfs-storage errors.
@@ -101,6 +101,3 @@ export class CidMismatchError extends IpfsStorageError {
     this.actual = actual;
   }
 }
-
-// Re-export encryption errors for convenience
-export { EncryptionError, ErrorCode } from "@0xd49daa/safecrypt";

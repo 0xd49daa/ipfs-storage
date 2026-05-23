@@ -1,11 +1,5 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-  type SymmetricKey,
-} from "@0xd49daa/safecrypt";
 import { asAsyncIterable } from "./async-iterable.ts";
 import { downloadFiles } from "./download-files.ts";
 import { getManifest } from "./manifest-retrieval.ts";
@@ -17,13 +11,14 @@ import type {
   MultiDownloadProgress,
   StreamingFileInput,
 } from "./types.ts";
+import {
+  type ContentHash,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(2);
-
-beforeAll(async () => {
-  await preloadSodium();
-});
 
 async function createTestFile(
   path: string,
@@ -34,7 +29,7 @@ async function createTestFile(
     : content;
   return {
     path,
-    contentHash: (await hashBlake2b(data, 32)) as ContentHash,
+    contentHash: await hashContent(data),
     size: data.length,
     getStream: () =>
       new ReadableStream({
@@ -106,8 +101,7 @@ describe("downloadFiles", () => {
 
     test("throws ValidationError for invalid concurrency", async () => {
       const client = new MockIpfsClient();
-      const fakeHash =
-        (await hashBlake2b(new Uint8Array(32), 32)) as ContentHash;
+      const fakeHash = await hashContent(new Uint8Array(32));
       const ref: FileDownloadRef = {
         batchCid: "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354",
         path: "/test.txt",
@@ -212,8 +206,7 @@ describe("downloadFiles", () => {
         ],
         client,
       );
-      const fakeHash =
-        (await hashBlake2b(new Uint8Array(32), 32)) as ContentHash;
+      const fakeHash = await hashContent(new Uint8Array(32));
       const badRef: FileDownloadRef = {
         batchCid: refs[0]!.batchCid,
         path: "/bad.txt",

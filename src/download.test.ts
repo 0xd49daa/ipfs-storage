@@ -2,13 +2,8 @@
  * Tests for Single File Download (Phase 14).
  */
 
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-} from "@0xd49daa/safecrypt";
 import {
   type BatchManifest,
   ChunkUnavailableError,
@@ -24,29 +19,28 @@ import { downloadFile } from "./download.ts";
 import { uploadBatch } from "./streaming-upload.ts";
 import { getManifest } from "./manifest-retrieval.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
+import {
+  type ContentHash,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
-const manifestKey = new Uint8Array(
-  32,
-) as import("@0xd49daa/safecrypt").SymmetricKey;
+const manifestKey = new Uint8Array(32) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(1);
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
-beforeAll(async () => {
-  await preloadSodium();
-});
-
 /** Compute content hash for a string */
 async function hashString(content: string): Promise<ContentHash> {
   const bytes = new TextEncoder().encode(content);
-  return (await hashBlake2b(bytes, 32)) as ContentHash;
+  return hashContent(bytes);
 }
 
 /** Compute content hash for Uint8Array */
 async function hashBytes(data: Uint8Array): Promise<ContentHash> {
-  return (await hashBlake2b(data, 32)) as ContentHash;
+  return hashContent(data);
 }
 
 /** Create StreamingFileInput from string content */

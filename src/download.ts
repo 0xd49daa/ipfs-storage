@@ -7,9 +7,9 @@
 
 import {
   constantTimeEqual,
-  createBlake2bHasher,
-  hashBlake2b,
-} from "@0xd49daa/safecrypt";
+  createContentHasher,
+  hashContent,
+} from "./crypto-primitives.ts";
 import type { IpfsClient } from "./ipfs-client.ts";
 import type { ChunkRef, DownloadOptions, FileDownloadRef } from "./types.ts";
 import { chunkIdToPath } from "./chunk-id.ts";
@@ -264,7 +264,7 @@ async function* downloadFileIterable(
   // Handle empty files (size 0, no chunks)
   if (ref.size === 0) {
     // Verify empty content hash
-    const emptyHash = await hashBlake2b(new Uint8Array(0), 32);
+    const emptyHash = await hashContent(new Uint8Array(0));
 
     const hashMatches = await constantTimeEqual(emptyHash, ref.contentHash);
     if (!hashMatches) {
@@ -287,7 +287,7 @@ async function* downloadFileIterable(
   const batchId = await fetchBatchId(ref.batchCid, ipfsClient, signal);
 
   // Create streaming hasher for incremental integrity verification
-  const hasher = await createBlake2bHasher();
+  const hasher = createContentHasher();
 
   // Progress tracking
   let bytesYielded = 0;
@@ -403,7 +403,7 @@ async function* downloadFileIterable(
     const error = new IntegrityError(
       ref.path,
       ref.contentHash,
-      actualHash as typeof ref.contentHash,
+      actualHash,
     );
     if (integrityMode === "strict") {
       throw error;

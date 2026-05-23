@@ -5,13 +5,8 @@
  * when chunk uploads fail due to transient errors.
  */
 
-import { beforeAll, beforeEach, describe, it as test } from "@std/testing/bdd";
+import { beforeEach, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-} from "@0xd49daa/safecrypt";
 import {
   asAsyncIterable,
   ChunkUploadError,
@@ -20,10 +15,13 @@ import {
   MockIpfsClient,
   type StreamingFileInput,
 } from "./index.ts";
+import {
+  type ContentHash,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
-const manifestKey = new Uint8Array(
-  32,
-) as import("@0xd49daa/safecrypt").SymmetricKey;
+const manifestKey = new Uint8Array(32) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(1);
 
 // ============================================================================
@@ -37,7 +35,7 @@ async function createFileInput(
   const bytes = new TextEncoder().encode(content);
   return {
     path,
-    contentHash: (await hashBlake2b(bytes, 32)) as ContentHash,
+    contentHash: await hashContent(bytes),
     size: bytes.length,
     getStream: () =>
       new ReadableStream({
@@ -56,10 +54,6 @@ async function createFileInput(
 describe("Upload Retry Mechanism", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
-
-  beforeAll(async () => {
-    await preloadSodium();
-  });
 
   beforeEach(() => {
     ipfsClient = new MockIpfsClient();

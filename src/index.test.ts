@@ -12,11 +12,9 @@ import { CHUNK_SIZE, DOMAIN } from "./constants.ts";
 import { deriveFileKey } from "./crypto.ts";
 import { asBatchCid, asChunkId, asFilePath } from "./branded.ts";
 import {
-  asContentHash,
-  generateKey,
-  hashBlake2b,
-  preloadSodium,
-} from "@0xd49daa/safecrypt";
+  generateSymmetricKey as generateKey,
+  hashContent,
+} from "./crypto-primitives.ts";
 
 describe("Phase 0: Foundation", () => {
   describe("constants", () => {
@@ -85,11 +83,8 @@ describe("Phase 0: Foundation", () => {
     });
 
     test("IntegrityError contains path and hashes", async () => {
-      await preloadSodium();
-      const expected = asContentHash(
-        await hashBlake2b(new Uint8Array([1]), 32),
-      );
-      const actual = asContentHash(await hashBlake2b(new Uint8Array([2]), 32));
+      const expected = await hashContent(new Uint8Array([1]));
+      const actual = await hashContent(new Uint8Array([2]));
       const err = new IntegrityError("/test.txt", expected, actual);
 
       expect(err.path).toBe("/test.txt");
@@ -120,12 +115,8 @@ describe("Phase 0: Foundation", () => {
 
   describe("deriveFileKey", () => {
     test("produces deterministic output for same inputs", async () => {
-      await preloadSodium();
-
       const manifestKey = await generateKey();
-      const contentHash = asContentHash(
-        await hashBlake2b(new Uint8Array([1, 2, 3]), 32),
-      );
+      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
 
       const key1 = await deriveFileKey(manifestKey, contentHash);
       const key2 = await deriveFileKey(manifestKey, contentHash);
@@ -134,15 +125,9 @@ describe("Phase 0: Foundation", () => {
     });
 
     test("produces different output for different content hashes", async () => {
-      await preloadSodium();
-
       const manifestKey = await generateKey();
-      const hash1 = asContentHash(
-        await hashBlake2b(new Uint8Array([1, 2, 3]), 32),
-      );
-      const hash2 = asContentHash(
-        await hashBlake2b(new Uint8Array([4, 5, 6]), 32),
-      );
+      const hash1 = await hashContent(new Uint8Array([1, 2, 3]));
+      const hash2 = await hashContent(new Uint8Array([4, 5, 6]));
 
       const key1 = await deriveFileKey(manifestKey, hash1);
       const key2 = await deriveFileKey(manifestKey, hash2);
@@ -151,13 +136,9 @@ describe("Phase 0: Foundation", () => {
     });
 
     test("produces different output for different manifest keys", async () => {
-      await preloadSodium();
-
       const manifestKey1 = await generateKey();
       const manifestKey2 = await generateKey();
-      const contentHash = asContentHash(
-        await hashBlake2b(new Uint8Array([1, 2, 3]), 32),
-      );
+      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
 
       const key1 = await deriveFileKey(manifestKey1, contentHash);
       const key2 = await deriveFileKey(manifestKey2, contentHash);
@@ -166,12 +147,8 @@ describe("Phase 0: Foundation", () => {
     });
 
     test("produces 32-byte key", async () => {
-      await preloadSodium();
-
       const manifestKey = await generateKey();
-      const contentHash = asContentHash(
-        await hashBlake2b(new Uint8Array([1, 2, 3]), 32),
-      );
+      const contentHash = await hashContent(new Uint8Array([1, 2, 3]));
 
       const fileKey = await deriveFileKey(manifestKey, contentHash);
 

@@ -1,6 +1,5 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import { preloadSodium } from "@0xd49daa/safecrypt";
 import {
   buildVaultChunkAad,
   buildVaultChunkFileKeyInfo,
@@ -43,10 +42,6 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 describe("Vault AEAD crypto foundation", () => {
-  beforeAll(async () => {
-    await preloadSodium();
-  });
-
   describe("canonical AEAD records", () => {
     test("round-trips a chunk record", async () => {
       const manifestKey = randomBytes(VAULT_AES_256_KEY_SIZE);

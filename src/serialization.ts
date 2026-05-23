@@ -1,5 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { asContentHash } from "@0xd49daa/safecrypt";
+import { asContentHash } from "./crypto-primitives.ts";
 import { ValidationError } from "./errors.ts";
 import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
 

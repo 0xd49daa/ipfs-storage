@@ -105,7 +105,8 @@ export {
 } from "./errors.ts";
 
 // =============================================================================
-// Re-exported Encryption Types (for convenience)
+// Content Hash Helpers
 // =============================================================================
 
-export type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
+export { asContentHash, hashContent } from "./crypto-primitives.ts";
+export type { ContentHash, SymmetricKey } from "./crypto-primitives.ts";

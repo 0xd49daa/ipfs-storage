@@ -1,12 +1,6 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import { create, toBinary } from "@bufbuild/protobuf";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-  type SymmetricKey,
-} from "@0xd49daa/safecrypt";
 import {
   asAsyncIterable,
   ManifestError,
@@ -26,13 +20,10 @@ import {
   encryptVaultManifestRecord,
   VAULT_BATCH_ID_SIZE,
 } from "./vault-aead.ts";
+import { hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(2);
-
-beforeAll(async () => {
-  await preloadSodium();
-});
 
 async function createFileInput(
   content: string,
@@ -41,7 +32,7 @@ async function createFileInput(
   const bytes = new TextEncoder().encode(content);
   return {
     path,
-    contentHash: (await hashBlake2b(bytes, 32)) as ContentHash,
+    contentHash: await hashContent(bytes),
     size: bytes.length,
     getStream: () =>
       new ReadableStream({

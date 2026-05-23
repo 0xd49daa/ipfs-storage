@@ -33,11 +33,11 @@ deno add jsr:@0xd49daa/ipfs-storage
 import {
   asAsyncIterable,
   createIpfsStorageModule,
+  hashContent,
   MockIpfsClient,
   type StreamingFileInput,
   type SymmetricKey,
 } from "@0xd49daa/ipfs-storage";
-import { hashBlake2b } from "@0xd49daa/safecrypt";
 
 const storage = createIpfsStorageModule({
   ipfsClient: new MockIpfsClient(),
@@ -51,7 +51,7 @@ const batch_id = crypto.getRandomValues(new Uint8Array(16));
 const file: StreamingFileInput = {
   path: "/hello.txt",
   size: content.length,
-  contentHash: await hashBlake2b(content, 32),
+  contentHash: await hashContent(content),
   getStream: () => asAsyncIterable([content]),
 };
 
@@ -80,26 +80,33 @@ for await (const chunk of storage.downloadFile(fileRef, { manifestKey })) {
 
 ## API Overview
 
-| Method | Description |
-| --- | --- |
-| `createIpfsStorageModule(config)` | Create a module instance with a bound IPFS client |
-| `module.uploadBatch(files, options)` | Upload an encrypted file batch using `manifestKey` and `batch_id` |
-| `module.getManifest(cid, options)` | Retrieve and decrypt the manifest using `manifestKey` |
-| `module.downloadFile(ref, options)` | Download and decrypt one file |
-| `module.downloadFiles(refs, options)` | Download and decrypt multiple files sequentially |
-| `getBatchIdFromManifestBlob(blob)` | Parse the plaintext `batch_id` prefix from a root manifest blob |
+| Method                                | Description                                                       |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `createIpfsStorageModule(config)`     | Create a module instance with a bound IPFS client                 |
+| `module.uploadBatch(files, options)`  | Upload an encrypted file batch using `manifestKey` and `batch_id` |
+| `module.getManifest(cid, options)`    | Retrieve and decrypt the manifest using `manifestKey`             |
+| `module.downloadFile(ref, options)`   | Download and decrypt one file                                     |
+| `module.downloadFiles(refs, options)` | Download and decrypt multiple files sequentially                  |
+| `getBatchIdFromManifestBlob(blob)`    | Parse the plaintext `batch_id` prefix from a root manifest blob   |
+| `hashContent(bytes)`                  | Compute the content hash format accepted by this package          |
 
 See [REFERENCE.md](./REFERENCE.md) for complete API documentation.
 
 ## Symmetric Keys
 
 `manifestKey` is a caller-owned 32-byte AES-256 key. The package does not derive
-it from a mnemonic, wrap it for recipients, or store it in the manifest. Vault or
-another consumer is responsible for deriving, storing, or sharing this key.
+it from a mnemonic, wrap it for recipients, or store it in the manifest. Vault
+or another consumer is responsible for deriving, storing, or sharing this key.
 
 `batch_id` is a caller-owned 16-byte random value. It is used as a Vault locator
 and as part of AEAD additional authenticated data. Generate a fresh `batch_id`
 for each uploaded batch.
+
+## Content Hashes
+
+Use `hashContent()` to compute `StreamingFileInput.contentHash`. The helper name
+intentionally does not expose the underlying algorithm; callers should treat the
+exact content hash format as owned by this package.
 
 ## Wire Format Notes
 
@@ -116,9 +123,9 @@ version(1) | key_scope(1) | nonce(12) | ciphertext | tag(16)
 
 Supported key scopes are:
 
-| Scope | Value | Used For |
-| --- | --- | --- |
-| Chunk | `0x04` | Encrypted file chunk records |
+| Scope    | Value  | Used For                                |
+| -------- | ------ | --------------------------------------- |
+| Chunk    | `0x04` | Encrypted file chunk records            |
 | Manifest | `0x05` | Encrypted root and sub-manifest records |
 
 Manifest records use the `manifestKey` directly. Chunk records use file-scoped
@@ -144,13 +151,13 @@ persistent, plaintext persistence is controlled by the caller.
 
 ## Error Handling
 
-| Error Class | When Thrown |
-| --- | --- |
-| `ValidationError` | Invalid inputs such as empty paths, missing `manifestKey`, or invalid `batch_id` |
-| `IntegrityError` | Content hash mismatch on download |
-| `ManifestError` | Cannot fetch, parse, or decrypt a manifest |
-| `ChunkUnavailableError` | Chunk fetch failed after retries |
-| `CidMismatchError` | CID verification failed |
+| Error Class             | When Thrown                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `ValidationError`       | Invalid inputs such as empty paths, missing `manifestKey`, or invalid `batch_id` |
+| `IntegrityError`        | Content hash mismatch on download                                                |
+| `ManifestError`         | Cannot fetch, parse, or decrypt a manifest                                       |
+| `ChunkUnavailableError` | Chunk fetch failed after retries                                                 |
+| `CidMismatchError`      | CID verification failed                                                          |
 
 All errors extend `IpfsStorageError`. See [REFERENCE.md](./REFERENCE.md) for
 details.
@@ -195,12 +202,12 @@ batch_root/
 
 Key design decisions:
 
-| Decision | Rationale |
-| --- | --- |
-| Immutable batches | CID never changes; compatible with storage orders |
-| 16 MiB chunks | Balance aggregation efficiency and streaming behavior |
-| Randomized chunk paths | Avoid leaking file paths through IPFS object names |
-| PADME padding | Reduce plaintext size leakage before encryption |
+| Decision               | Rationale                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| Immutable batches      | CID never changes; compatible with storage orders                                |
+| 16 MiB chunks          | Balance aggregation efficiency and streaming behavior                            |
+| Randomized chunk paths | Avoid leaking file paths through IPFS object names                               |
+| PADME padding          | Reduce plaintext size leakage before encryption                                  |
 | Symmetric manifest key | Keeps this package focused on storage wire format; callers handle key management |
 
 ## Migration Notes

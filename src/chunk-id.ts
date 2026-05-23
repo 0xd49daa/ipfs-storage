@@ -1,5 +1,4 @@
 import { base58 } from "@scure/base";
-import { randomBytes } from "@0xd49daa/safecrypt";
 import { type ChunkId, unsafe } from "./branded.ts";
 
 /** Expected length of a ChunkId (base58-encoded 16 bytes) */
@@ -10,7 +9,8 @@ const CHUNK_ID_LENGTH = 22;
  * Uses 16 random bytes encoded as base58, padded to 22 characters.
  */
 export async function generateChunkId(): Promise<ChunkId> {
-  const bytes = await randomBytes(16);
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
   let encoded = base58.encode(bytes);
 
   // Base58 encoding of 16 bytes can be 21-22 chars depending on leading zeros

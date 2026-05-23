@@ -5,12 +5,12 @@
   "license": "MIT",
   "exports": "./src/index.ts",
   "imports": {
-    "@0xd49daa/safecrypt": "jsr:@0xd49daa/safecrypt@^0.1.4",
     "@bufbuild/protobuf": "npm:@bufbuild/protobuf@2.10.1",
     "@bufbuild/protobuf/codegenv2": "npm:@bufbuild/protobuf@2.10.1/codegenv2",
     "@ipld/car": "npm:@ipld/car@5.3.3",
     "@ipld/dag-pb": "npm:@ipld/dag-pb@4.1.5",
     "@ipld/unixfs": "npm:@ipld/unixfs@3.0.0",
+    "@noble/hashes/blake2b": "npm:@noble/hashes@1.8.0/blake2b",
     "@scure/base": "npm:@scure/base@1.2.1",
     "multiformats/cid": "npm:multiformats@13.3.1/cid",
     "multiformats/codecs/raw": "npm:multiformats@13.3.1/codecs/raw",

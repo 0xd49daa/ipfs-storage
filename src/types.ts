@@ -1,4 +1,4 @@
-import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
+import type { ContentHash, SymmetricKey } from "./crypto-primitives.ts";
 
 // Re-export ChunkEncryption from generated protobuf
 export { ChunkEncryption } from "./gen/manifest_pb.ts";

@@ -1,4 +1,4 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   buildAndEncryptManifest,
@@ -15,20 +15,23 @@ import { SUB_MANIFEST_SIZE } from "./constants.ts";
 import { ValidationError } from "./errors.ts";
 import { decryptVaultManifestRecord } from "./vault-aead.ts";
 import {
-  asContentHash,
-  generateKey,
-  hashBlake2b,
-  preloadSodium,
-  randomBytes,
-} from "@0xd49daa/safecrypt";
-import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
+  type ContentHash,
+  generateSymmetricKey as generateKey,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
 const batchId = new Uint8Array(16).fill(7);
 
+function randomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
+
 // Helper to create a content hash
 async function mockContentHash(): Promise<ContentHash> {
-  const data = await randomBytes(32);
-  return asContentHash(await hashBlake2b(data, 32));
+  return hashContent(randomBytes(32));
 }
 
 // Helper to create a FileInfo for testing
@@ -99,10 +102,6 @@ async function decryptPaddedManifestBytes(
 }
 
 describe("Phase 9: Manifest Construction & Encryption", () => {
-  beforeAll(async () => {
-    await preloadSodium();
-  });
-
   describe("sortFilesByPath()", () => {
     test("sorts by byte-wise comparison", async () => {
       const files = [
@@ -587,7 +586,9 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
           i + 1,
         );
         expect(padded.length).toBe(padme(4 + manifest.subManifests[i]!.length));
-        expect(unpadManifestPlaintext(padded)).toEqual(manifest.subManifests[i]);
+        expect(unpadManifestPlaintext(padded)).toEqual(
+          manifest.subManifests[i],
+        );
       }
     });
 

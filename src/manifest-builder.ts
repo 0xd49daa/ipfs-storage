@@ -4,7 +4,7 @@
  * Builds, splits, and encrypts manifests for IPFS batch storage.
  */
 
-import type { SymmetricKey } from "@0xd49daa/safecrypt";
+import type { SymmetricKey } from "./crypto-primitives.ts";
 
 import { MANIFEST_VERSION_SUPPORTED, SUB_MANIFEST_SIZE } from "./constants.ts";
 import { ValidationError } from "./errors.ts";

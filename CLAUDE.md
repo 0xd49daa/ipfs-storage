@@ -9,8 +9,8 @@ Browser-first TypeScript library for IPFS-based encrypted batch storage.
 Stateless module — client stores manifests locally.
 
 **Package:** `@0xd49daa/ipfs-storage` **Runtime:** Browser (primary), Deno
-(development/testing) **Serialization:** Protocol Buffers **Crypto:**
-`@0xd49daa/safecrypt`
+(development/testing) **Serialization:** Protocol Buffers **Crypto:** WebCrypto
+AES-GCM and `@noble/hashes`
 
 ## Version Management
 
@@ -62,8 +62,8 @@ batch_root/
 
 ### Chunk Aggregation
 
-| File size | Strategy                                |
-| --------- | --------------------------------------- |
+| File size | Strategy                                  |
+| --------- | ----------------------------------------- |
 | < 16 MiB  | Aggregate into shared chunk until ~16 MiB |
 | ≥ 16 MiB  | Split into dedicated 16 MiB chunks        |
 
@@ -78,28 +78,28 @@ keys are derived from the `manifestKey` and the file path hash.
 
 ## Cryptography Mapping
 
-Crypto uses WebCrypto AES-GCM for Vault AEAD records plus safecrypt helpers for
-hashing/types:
+Crypto uses WebCrypto AES-GCM for Vault AEAD records plus `@noble/hashes` for
+content hashing:
 
-| Operation             | Implementation                                      |
-| --------------------- | --------------------------------------------------- |
-| Manifest key          | Caller-provided 32-byte AES-256 key                 |
-| Batch id              | Caller-provided 16-byte random value                |
-| Chunk key derivation  | WebCrypto HKDF over `manifestKey` + file path hash  |
-| Chunk encrypt/decrypt | Vault AES-GCM AEAD record, key scope `0x04`         |
-| Manifest encrypt      | Vault AES-GCM AEAD record, key scope `0x05`         |
-| Content hash          | `hashBlake2b(content, 32)`                          |
+| Operation             | Implementation                                     |
+| --------------------- | -------------------------------------------------- |
+| Manifest key          | Caller-provided 32-byte AES-256 key                |
+| Batch id              | Caller-provided 16-byte random value               |
+| Chunk key derivation  | WebCrypto HKDF over `manifestKey` + file path hash |
+| Chunk encrypt/decrypt | Vault AES-GCM AEAD record, key scope `0x04`        |
+| Manifest encrypt      | Vault AES-GCM AEAD record, key scope `0x05`        |
+| Content hash          | `hashContent(content)`                             |
 
 ## Dependencies
 
-| Package               | Purpose                      |
-| --------------------- | ---------------------------- |
-| `@0xd49daa/safecrypt` | Content hash and symmetric key types |
-| `@ipld/car`           | CAR file generation          |
-| `@ipld/unixfs`        | UnixFS directory building    |
-| `multiformats`        | CID handling                 |
-| `@bufbuild/protobuf`  | Protocol Buffers             |
-| `@scure/base`         | base58 encoding              |
+| Package              | Purpose                     |
+| -------------------- | --------------------------- |
+| `@noble/hashes`      | Content hash implementation |
+| `@ipld/car`          | CAR file generation         |
+| `@ipld/unixfs`       | UnixFS directory building   |
+| `multiformats`       | CID handling                |
+| `@bufbuild/protobuf` | Protocol Buffers            |
+| `@scure/base`        | base58 encoding             |
 
 ## Key Design Decisions
 
@@ -117,14 +117,14 @@ hashing/types:
 
 ## Error Classes
 
-| Class                   | Meaning                                         |
-| ----------------------- | ----------------------------------------------- |
-| `ValidationError`       | Invalid paths, missing key, invalid batch id    |
-| `IntegrityError`        | Content hash mismatch on download               |
-| `ManifestError`         | Cannot parse or decrypt manifest                |
-| `ChunkUnavailableError` | Chunk fetch failed after retries                |
-| `SegmentUploadError`    | Segment upload failed, includes resume state    |
-| `CidMismatchError`      | CID verification failed                         |
+| Class                   | Meaning                                      |
+| ----------------------- | -------------------------------------------- |
+| `ValidationError`       | Invalid paths, missing key, invalid batch id |
+| `IntegrityError`        | Content hash mismatch on download            |
+| `ManifestError`         | Cannot parse or decrypt manifest             |
+| `ChunkUnavailableError` | Chunk fetch failed after retries             |
+| `SegmentUploadError`    | Segment upload failed, includes resume state |
+| `CidMismatchError`      | CID verification failed                      |
 
 ## Key Documents
 

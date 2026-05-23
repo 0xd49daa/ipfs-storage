@@ -1,15 +1,12 @@
 /**
- * Chunk decryption utilities for IPFS storage.
+ * Chunk encryption metadata utilities for IPFS storage.
  *
- * This module provides decryption functions for encrypted chunks.
- * Used by download.ts for decrypting file data.
+ * Vault AEAD encryption/decryption lives in vault-aead.ts. This module keeps
+ * legacy encrypted-length helpers used by tests and metadata checks.
  */
 
-import type { Nonce, SymmetricKey } from "@0xd49daa/safecrypt";
-import { createDecryptStream, decrypt } from "@0xd49daa/safecrypt";
 import { ChunkEncryption } from "./gen/manifest_pb.ts";
 import {
-  NONCE_SIZE,
   SINGLE_SHOT_OVERHEAD,
   STREAM_CHUNK_OVERHEAD,
   STREAM_CHUNK_SIZE,
@@ -48,85 +45,5 @@ export function computeEncryptedLength(
     const numChunks = Math.ceil(plaintextLength / STREAM_CHUNK_SIZE);
     return plaintextLength + STREAM_HEADER_SIZE +
       numChunks * STREAM_CHUNK_OVERHEAD;
-  }
-}
-
-// ============================================================================
-// Decryption Functions
-// ============================================================================
-
-/**
- * Decrypt segment using single-shot mode.
- * Expects wire format: [24-byte nonce][ciphertext with 16-byte tag]
- */
-export async function decryptSingleShot(
-  encryptedData: Uint8Array,
-  key: SymmetricKey,
-): Promise<Uint8Array> {
-  const nonce = encryptedData.subarray(0, NONCE_SIZE) as Nonce;
-  const ciphertext = encryptedData.subarray(NONCE_SIZE);
-  return decrypt(ciphertext, nonce, key);
-}
-
-/**
- * Decrypt segment using streaming mode.
- * Expects wire format: [24-byte header][encrypted_chunks...]
- *
- * IMPORTANT: This function assumes encrypted chunks were created with
- * STREAM_CHUNK_SIZE (64KB) as the plaintext chunk size. This is safe because:
- * 1. STREAM_CHUNK_SIZE is a locked constant (not configurable)
- * 2. encryptStreaming() always uses STREAM_CHUNK_SIZE
- * 3. Both encrypt and decrypt use the same constant
- *
- * The secretstream format requires feeding exact encrypted chunk boundaries
- * to pull(), so we must know the chunk size used during encryption.
- */
-export async function decryptStreaming(
-  encryptedData: Uint8Array,
-  key: SymmetricKey,
-): Promise<Uint8Array> {
-  const header = encryptedData.subarray(0, STREAM_HEADER_SIZE);
-  const stream = await createDecryptStream(
-    key,
-    header as unknown as import("@0xd49daa/safecrypt").SecretstreamHeader,
-  );
-
-  try {
-    const encryptedBody = encryptedData.subarray(STREAM_HEADER_SIZE);
-    const chunks: Uint8Array[] = [];
-
-    let readOffset = 0;
-    while (readOffset < encryptedBody.length) {
-      // Each encrypted chunk = STREAM_CHUNK_SIZE plaintext + 17 bytes overhead
-      // (except final chunk which may be smaller)
-      const chunkSize = STREAM_CHUNK_SIZE + STREAM_CHUNK_OVERHEAD;
-      const remaining = encryptedBody.length - readOffset;
-      const encChunkLen = Math.min(chunkSize, remaining);
-
-      const encChunk = encryptedBody.subarray(
-        readOffset,
-        readOffset + encChunkLen,
-      );
-      const { plaintext, isFinal } = stream.pull(encChunk);
-      chunks.push(plaintext);
-
-      readOffset += encChunkLen;
-      if (isFinal) break;
-    }
-
-    stream.finalize();
-
-    // Concatenate plaintext chunks
-    const totalLen = chunks.reduce((sum, c) => sum + c.length, 0);
-    const result = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return result;
-  } finally {
-    stream.dispose();
   }
 }

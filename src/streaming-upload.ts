@@ -13,7 +13,7 @@
  * 6. Final CAR contains directory structure linking to uploaded chunks
  */
 
-import { type SymmetricKey } from "@0xd49daa/safecrypt";
+import type { SymmetricKey } from "./crypto-primitives.ts";
 import { CID } from "multiformats/cid";
 import { CarBufferWriter } from "@ipld/car";
 import * as dagPb from "@ipld/dag-pb";
@@ -440,7 +440,7 @@ class AggregationBufferManager {
   }
 
   /**
-    * Flush current buffer as a chunk.
+   * Flush current buffer as a chunk.
    */
   async flush(_isFinal: boolean): Promise<UploadedChunk | null> {
     const totalSegmentCount = this.segments.length + this.streamSegments.length;

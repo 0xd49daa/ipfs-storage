@@ -2,36 +2,30 @@
  * Tests for Module Factory (Phase 17).
  */
 
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-} from "@0xd49daa/safecrypt";
 import { createIpfsStorageModule } from "./module.ts";
 import { MockIpfsClient } from "./ipfs-client.ts";
 import { ValidationError } from "./errors.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
 import type { IpfsStorageConfig, StreamingFileInput } from "./types.ts";
+import {
+  type ContentHash,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
-const manifestKey = new Uint8Array(
-  32,
-) as import("@0xd49daa/safecrypt").SymmetricKey;
+const manifestKey = new Uint8Array(32) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(1);
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
-beforeAll(async () => {
-  await preloadSodium();
-});
-
 /** Compute content hash for a string */
 async function hashString(content: string): Promise<ContentHash> {
   const bytes = new TextEncoder().encode(content);
-  return (await hashBlake2b(bytes, 32)) as ContentHash;
+  return hashContent(bytes);
 }
 
 /** Create StreamingFileInput from string content */

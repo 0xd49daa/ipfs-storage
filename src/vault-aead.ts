@@ -1,4 +1,4 @@
-import { hashBlake2b } from "@0xd49daa/safecrypt";
+import { hashBytes } from "./crypto-primitives.ts";
 
 export const VAULT_AEAD_VERSION = 0x01;
 export const VAULT_KEY_SCOPE_CHUNK = 0x04;
@@ -311,7 +311,7 @@ export function buildVaultManifestAad(
 export async function computeVaultFilePathHash(
   filePathWithinBatch: string,
 ): Promise<Uint8Array> {
-  return hashBlake2b(textEncoder.encode(filePathWithinBatch), 32);
+  return hashBytes(textEncoder.encode(filePathWithinBatch), 32);
 }
 
 export function buildVaultChunkFileKeyInfo(

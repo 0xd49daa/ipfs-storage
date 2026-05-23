@@ -3,10 +3,9 @@ import { IpfsFetchError, IpfsUploadError } from "../src/ipfs-client.ts";
 import { afterAll, beforeAll } from "@std/testing/bdd";
 import {
   type ContentHash,
-  hashBlake2b,
-  preloadSodium,
+  hashContent,
   type SymmetricKey,
-} from "@0xd49daa/safecrypt";
+} from "../src/crypto-primitives.ts";
 import { CarBufferReader } from "@ipld/car";
 import * as raw from "multiformats/codecs/raw";
 import * as dagPb from "@ipld/dag-pb";
@@ -170,7 +169,7 @@ export async function createStreamingFileInput(
     : data;
   return {
     path,
-    contentHash: (await hashBlake2b(bytes, 32)) as ContentHash,
+    contentHash: await hashContent(bytes),
     size: bytes.length,
     created,
     getStream: () =>
@@ -185,7 +184,6 @@ export async function createStreamingFileInput(
 
 // Check connection before all tests
 beforeAll(async () => {
-  await preloadSodium();
   try {
     const res = await fetch(`${IPFS_API_URL}/api/v0/id`, { method: "POST" });
     if (!res.ok) throw new Error(`IPFS not healthy: ${res.status}`);

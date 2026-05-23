@@ -1,28 +1,20 @@
-import { beforeAll, beforeEach, describe, it as test } from "@std/testing/bdd";
+import { beforeEach, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-  type SymmetricKey,
-} from "@0xd49daa/safecrypt";
 import {
   asAsyncIterable,
   type BatchManifest,
   createIpfsStorageModule,
   type DirectoryInput,
   type FileDownloadRef,
+  hashContent,
   type IpfsStorageModule,
   MockIpfsClient,
   type StreamingFileInput,
+  type SymmetricKey,
 } from "./index.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(2);
-
-beforeAll(async () => {
-  await preloadSodium();
-});
 
 async function createFileInput(
   content: string,
@@ -38,7 +30,7 @@ async function createBinaryFileInput(
 ): Promise<StreamingFileInput> {
   return {
     path,
-    contentHash: (await hashBlake2b(data, 32)) as ContentHash,
+    contentHash: await hashContent(data),
     size: data.length,
     getStream: () =>
       new ReadableStream({
@@ -180,9 +172,7 @@ describe("Integration: symmetric API", () => {
       }),
     );
     expect(downloaded.length).toBe(data.length);
-    expect(await hashBlake2b(downloaded, 32)).toEqual(
-      await hashBlake2b(data, 32),
-    );
+    expect(await hashContent(downloaded)).toEqual(await hashContent(data));
   });
 
   test("explicit empty directories are preserved", async () => {

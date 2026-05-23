@@ -1,6 +1,10 @@
-import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
-import { hashBlake2b } from "@0xd49daa/safecrypt";
 import { DOMAIN } from "./constants.ts";
+import {
+  asSymmetricKey,
+  type ContentHash,
+  hashBytes,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
 /** Pre-computed UTF-8 encoded domain prefix */
 const FILE_KEY_DOMAIN = new TextEncoder().encode(DOMAIN.FILE_KEY);
@@ -9,7 +13,7 @@ const FILE_KEY_DOMAIN = new TextEncoder().encode(DOMAIN.FILE_KEY);
  * Derive a file encryption key from manifest key and content hash.
  *
  * Uses domain separation to prevent collisions:
- * fileKey = hashBlake2b(DOMAIN.FILE_KEY ‖ manifestKey ‖ contentHash, 32)
+ * fileKey = hash(DOMAIN.FILE_KEY ‖ manifestKey ‖ contentHash, 32)
  *
  * @param manifestKey - The batch's manifest encryption key (32 bytes)
  * @param contentHash - The file's content hash (32 bytes)
@@ -26,5 +30,5 @@ export async function deriveFileKey(
   input.set(contentHash, FILE_KEY_DOMAIN.length + 32);
 
   // Hash to 32 bytes
-  return hashBlake2b(input, 32) as Promise<SymmetricKey>;
+  return asSymmetricKey(hashBytes(input, 32));
 }

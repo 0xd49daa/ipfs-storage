@@ -1,6 +1,5 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import { preloadSodium } from "@0xd49daa/safecrypt";
 import { chunkIdToPath, generateChunkId } from "./chunk-id.ts";
 import {
   basename,
@@ -13,10 +12,6 @@ import { asChunkId, asFilePath } from "./branded.ts";
 
 const BASE58_REGEX =
   /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
-
-beforeAll(async () => {
-  await preloadSodium();
-});
 
 describe("Phase 3: Chunk ID Generation & Path Utilities", () => {
   describe("generateChunkId()", () => {

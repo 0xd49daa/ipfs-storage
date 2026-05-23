@@ -4,7 +4,7 @@
  * Implements getManifest() for fetching and decrypting batch manifests from IPFS.
  */
 
-import type { SymmetricKey } from "@0xd49daa/safecrypt";
+import type { SymmetricKey } from "./crypto-primitives.ts";
 
 import { ManifestError, ValidationError } from "./errors.ts";
 import {
@@ -175,7 +175,9 @@ async function fetchAndDecryptSubManifest(
 
   // Parse sub-manifest
   try {
-    const subManifest = decodeSubManifest(unpadManifestPlaintext(decryptedBytes));
+    const subManifest = decodeSubManifest(
+      unpadManifestPlaintext(decryptedBytes),
+    );
     return subManifest.files;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -271,7 +273,9 @@ export async function getManifest(
   // 6. Parse root manifest
   let rootManifest;
   try {
-    rootManifest = decodeRootManifest(unpadManifestPlaintext(decryptedRootBytes));
+    rootManifest = decodeRootManifest(
+      unpadManifestPlaintext(decryptedRootBytes),
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;

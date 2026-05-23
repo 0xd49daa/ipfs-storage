@@ -1,11 +1,5 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  type ContentHash,
-  hashBlake2b,
-  preloadSodium,
-  type SymmetricKey,
-} from "@0xd49daa/safecrypt";
 
 import { asAsyncIterable } from "./async-iterable.ts";
 import { MockIpfsClient } from "./ipfs-client.ts";
@@ -14,20 +8,21 @@ import { CHUNK_SIZE } from "./constants.ts";
 import { padme } from "./padme.ts";
 import type { StreamingFileInput } from "./types.ts";
 import {
-  VAULT_AEAD_VERSION,
   VAULT_AEAD_NONCE_SIZE,
   VAULT_AEAD_TAG_SIZE,
+  VAULT_AEAD_VERSION,
   VAULT_BATCH_ID_SIZE,
   VAULT_KEY_SCOPE_CHUNK,
   VAULT_KEY_SCOPE_MANIFEST,
 } from "./vault-aead.ts";
+import {
+  type ContentHash,
+  hashContent,
+  type SymmetricKey,
+} from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(0x11) as SymmetricKey;
 const VAULT_RECORD_OVERHEAD = 2 + VAULT_AEAD_NONCE_SIZE + VAULT_AEAD_TAG_SIZE;
-
-beforeAll(async () => {
-  await preloadSodium();
-});
 
 function rangeBytes(length: number, start: number): Uint8Array {
   const bytes = new Uint8Array(length);
@@ -60,7 +55,7 @@ async function createFileInput(
 ): Promise<StreamingFileInput> {
   return {
     path,
-    contentHash: (await hashBlake2b(data, 32)) as ContentHash,
+    contentHash: await hashContent(data),
     size: data.length,
     getStream: () =>
       new ReadableStream({
@@ -156,7 +151,7 @@ describe("Phase 3 upload wire format", () => {
   test("sub-manifest blobs are pure manifest AEAD records", async () => {
     const ipfsClient = new MockIpfsClient();
     const batch_id = rangeBytes(VAULT_BATCH_ID_SIZE, 0xa0);
-    const emptyHash = (await hashBlake2b(new Uint8Array(0), 32)) as ContentHash;
+    const emptyHash = await hashContent(new Uint8Array(0));
     const longName = "a".repeat(3900);
     const files = Array.from(
       { length: 180 },

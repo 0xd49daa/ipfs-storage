@@ -1,4 +1,4 @@
-import { beforeAll, describe, it as test } from "@std/testing/bdd";
+import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import { create, toBinary } from "@bufbuild/protobuf";
 import {
@@ -18,25 +18,20 @@ import {
   type RootManifestData,
   type SubManifestData,
 } from "./types.ts";
-import {
-  asContentHash,
-  hashBlake2b,
-  preloadSodium,
-  randomBytes,
-} from "@0xd49daa/safecrypt";
-import type { ContentHash } from "@0xd49daa/safecrypt";
+import { type ContentHash, hashContent } from "./crypto-primitives.ts";
+
+function randomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
 
 // Helper to create a content hash
 async function mockContentHash(): Promise<ContentHash> {
-  const data = await randomBytes(32);
-  return asContentHash(await hashBlake2b(data, 32));
+  return hashContent(randomBytes(32));
 }
 
 describe("Phase 1: Serialization", () => {
-  beforeAll(async () => {
-    await preloadSodium();
-  });
-
   describe("ManifestEnvelope", () => {
     test("round-trip encrypted manifest bytes", () => {
       const original: ManifestEnvelopeData = {
@@ -304,9 +299,7 @@ describe("Phase 1: Serialization", () => {
 
   describe("empty file handling", () => {
     test("handles empty file (size 0, no chunks)", async () => {
-      const contentHash = asContentHash(
-        await hashBlake2b(new Uint8Array(0), 32),
-      );
+      const contentHash = await hashContent(new Uint8Array(0));
 
       const original: RootManifestData = {
         manifestVersion: MANIFEST_VERSION_SUPPORTED,

@@ -33,8 +33,8 @@ function createIpfsStorageModule(config: IpfsStorageConfig): IpfsStorageModule;
 
 Parameters:
 
-| Name | Type | Description |
-| --- | --- | --- |
+| Name     | Type                | Description          |
+| -------- | ------------------- | -------------------- |
 | `config` | `IpfsStorageConfig` | Module configuration |
 
 Returns: `IpfsStorageModule`.
@@ -42,7 +42,10 @@ Returns: `IpfsStorageModule`.
 Throws: `ValidationError` if `config` is invalid.
 
 ```typescript
-import { createIpfsStorageModule, MockIpfsClient } from "@0xd49daa/ipfs-storage";
+import {
+  createIpfsStorageModule,
+  MockIpfsClient,
+} from "@0xd49daa/ipfs-storage";
 
 const storage = createIpfsStorageModule({
   ipfsClient: new MockIpfsClient(),
@@ -101,15 +104,15 @@ function uploadBatch(
 ): Promise<BatchResult>;
 ```
 
-Most consumers call `module.uploadBatch(files, options)` so `ipfsClient` is bound
-by `createIpfsStorageModule()`.
+Most consumers call `module.uploadBatch(files, options)` so `ipfsClient` is
+bound by `createIpfsStorageModule()`.
 
 Parameters:
 
-| Name | Type | Description |
-| --- | --- | --- |
-| `files` | `AsyncIterable<StreamingFileInput>` | Files to upload |
-| `options` | `UploadOptions` | Upload configuration |
+| Name      | Type                                | Description          |
+| --------- | ----------------------------------- | -------------------- |
+| `files`   | `AsyncIterable<StreamingFileInput>` | Files to upload      |
+| `options` | `UploadOptions`                     | Upload configuration |
 
 Returns: `Promise<BatchResult>`.
 
@@ -133,13 +136,13 @@ interface StreamingFileInput {
 
 Fields:
 
-| Field | Description |
-| --- | --- |
-| `path` | Full path in the batch, such as `/photos/2024/img.jpg` |
-| `contentHash` | Caller-computed 32-byte BLAKE2b content hash |
-| `size` | Plaintext file size in bytes |
-| `created` | Optional Unix timestamp in milliseconds; defaults to upload time |
-| `getStream` | Returns file content as a browser `ReadableStream` or `AsyncIterable` |
+| Field         | Description                                                           |
+| ------------- | --------------------------------------------------------------------- |
+| `path`        | Full path in the batch, such as `/photos/2024/img.jpg`                |
+| `contentHash` | Caller-computed content hash from `hashContent()`                     |
+| `size`        | Plaintext file size in bytes                                          |
+| `created`     | Optional Unix timestamp in milliseconds; defaults to upload time      |
+| `getStream`   | Returns file content as a browser `ReadableStream` or `AsyncIterable` |
 
 ### DirectoryInput
 
@@ -170,16 +173,16 @@ interface UploadOptions {
 
 Fields:
 
-| Field | Description |
-| --- | --- |
-| `manifestKey` | Required 32-byte caller-derived symmetric key |
-| `batch_id` | Required 16-byte caller-supplied batch id, usually random per batch |
-| `directories` | Optional explicit directory declarations |
-| `signal` | Optional cancellation signal |
-| `uploadRetries` | Retry attempts per chunk upload; default `3` |
-| `onProgress` | Upload progress callback |
-| `onChunkUploaded` | Called after a chunk upload completes |
-| `onSubManifestFlushed` | Called after an incremental sub-manifest upload completes |
+| Field                  | Description                                                         |
+| ---------------------- | ------------------------------------------------------------------- |
+| `manifestKey`          | Required 32-byte caller-derived symmetric key                       |
+| `batch_id`             | Required 16-byte caller-supplied batch id, usually random per batch |
+| `directories`          | Optional explicit directory declarations                            |
+| `signal`               | Optional cancellation signal                                        |
+| `uploadRetries`        | Retry attempts per chunk upload; default `3`                        |
+| `onProgress`           | Upload progress callback                                            |
+| `onChunkUploaded`      | Called after a chunk upload completes                               |
+| `onSubManifestFlushed` | Called after an incremental sub-manifest upload completes           |
 
 Abort behavior:
 
@@ -269,16 +272,17 @@ Most consumers call `module.getManifest(batchCid, options)` with `ReadOptions`.
 
 Parameters:
 
-| Name | Type | Description |
-| --- | --- | --- |
-| `batchCid` | `string` | Root CID of the batch |
-| `options` | `ReadOptions` or `GetManifestOptions` | Manifest retrieval options |
+| Name       | Type                                  | Description                |
+| ---------- | ------------------------------------- | -------------------------- |
+| `batchCid` | `string`                              | Root CID of the batch      |
+| `options`  | `ReadOptions` or `GetManifestOptions` | Manifest retrieval options |
 
 Returns: `Promise<BatchManifest>`.
 
 Throws:
 
-- `ValidationError` for an empty CID, missing `manifestKey`, or invalid key size.
+- `ValidationError` for an empty CID, missing `manifestKey`, or invalid key
+  size.
 - `ManifestError` when the manifest cannot be fetched, decrypted, parsed, or has
   an unsupported version.
 
@@ -370,9 +374,9 @@ interface ChunkRef {
 }
 ```
 
-`offset` and `encryptedLength` address the encrypted segment inside an IPFS chunk
-object. `length` is the original plaintext segment length after removing PADME
-padding.
+`offset` and `encryptedLength` address the encrypted segment inside an IPFS
+chunk object. `length` is the original plaintext segment length after removing
+PADME padding.
 
 ---
 
@@ -398,9 +402,9 @@ function downloadFile(
 
 Most consumers call `module.downloadFile(file, options)`.
 
-If `options.output` is provided, decrypted bytes are written to the
-caller-owned `WritableStream` and the function returns `Promise<void>`. Without
-`output`, it returns `AsyncIterable<Uint8Array>`.
+If `options.output` is provided, decrypted bytes are written to the caller-owned
+`WritableStream` and the function returns `Promise<void>`. Without `output`, it
+returns `AsyncIterable<Uint8Array>`.
 
 Throws:
 
@@ -454,16 +458,16 @@ interface DownloadOptions {
 
 Fields:
 
-| Field | Description |
-| --- | --- |
-| `manifestKey` | Required 32-byte key for chunk key derivation and decryption |
-| `retries` | Retry attempts per chunk; default `3` |
-| `chunkConcurrency` | Parallel chunk fetch concurrency per file; default `3` |
-| `signal` | Optional cancellation signal |
-| `onProgress` | Single-file progress callback |
-| `integrityMode` | `strict` throws on hash mismatch; `warn` reports and continues |
-| `onIntegrityError` | Callback used in `warn` mode |
-| `output` | Optional caller-owned stream sink for decrypted bytes |
+| Field              | Description                                                    |
+| ------------------ | -------------------------------------------------------------- |
+| `manifestKey`      | Required 32-byte key for chunk key derivation and decryption   |
+| `retries`          | Retry attempts per chunk; default `3`                          |
+| `chunkConcurrency` | Parallel chunk fetch concurrency per file; default `3`         |
+| `signal`           | Optional cancellation signal                                   |
+| `onProgress`       | Single-file progress callback                                  |
+| `integrityMode`    | `strict` throws on hash mismatch; `warn` reports and continues |
+| `onIntegrityError` | Callback used in `warn` mode                                   |
+| `output`           | Optional caller-owned stream sink for decrypted bytes          |
 
 ### DownloadFilesOptions
 
@@ -555,15 +559,15 @@ version(1) | key_scope(1) | nonce(12) | ciphertext | tag(16)
 
 Supported values:
 
-| Name | Value |
-| --- | --- |
-| AEAD record version | `0x01` |
-| Chunk key scope | `0x04` |
-| Manifest key scope | `0x05` |
-| Nonce size | 12 bytes |
-| GCM tag size | 16 bytes |
-| Manifest key size | 32 bytes |
-| Batch id size | 16 bytes |
+| Name                | Value    |
+| ------------------- | -------- |
+| AEAD record version | `0x01`   |
+| Chunk key scope     | `0x04`   |
+| Manifest key scope  | `0x05`   |
+| Nonce size          | 12 bytes |
+| GCM tag size        | 16 bytes |
+| Manifest key size   | 32 bytes |
+| Batch id size       | 16 bytes |
 
 Manifest AAD contains `version`, manifest key scope, `batch_id`, and
 `manifest_node_id`. Root manifest node id is `0`; sub-manifests use sequential
@@ -576,8 +580,8 @@ hash.
 ### Plaintext Handling
 
 The library never writes plaintext files, OPFS caches, or temporary decrypted
-files. Decrypted bytes are returned to the caller as an async iterable or written
-to the caller-supplied `WritableStream` in `DownloadOptions.output`.
+files. Decrypted bytes are returned to the caller as an async iterable or
+written to the caller-supplied `WritableStream` in `DownloadOptions.output`.
 
 ---
 
@@ -702,26 +706,28 @@ type MultiDownloadProgressCallback = (progress: MultiDownloadProgress) => void;
 type DownloadErrorCallback = (error: Error, file: FileDownloadRef) => void;
 ```
 
-### Utility
+### Utilities
 
 ```typescript
 function asAsyncIterable<T>(items: Iterable<T>): AsyncIterable<T>;
+function hashContent(bytes: Uint8Array): Promise<ContentHash>;
+function asContentHash(bytes: Uint8Array): ContentHash;
 ```
 
-Converts an in-memory iterable to an async iterable for tests, examples, and
-small inputs.
+`asAsyncIterable()` converts an in-memory iterable to an async iterable for
+tests, examples, and small inputs. `hashContent()` computes the content hash
+format accepted by this package without exposing the concrete algorithm in the
+public API name.
 
 ---
 
-## Re-exported Types
+## Content Hash Helpers And Types
 
-The following types are re-exported from `@0xd49daa/safecrypt` for convenience:
+The following helpers and types are exported for caller-side file metadata:
 
 ```typescript
-export type {
-  ContentHash,
-  SymmetricKey,
-} from "@0xd49daa/safecrypt";
+export { asContentHash, hashContent } from "@0xd49daa/ipfs-storage";
+export type { ContentHash, SymmetricKey } from "@0xd49daa/ipfs-storage";
 ```
 
 Asymmetric key pair and public/private key types are not re-exported by this
