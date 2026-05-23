@@ -15,11 +15,11 @@ import type { Message } from "@bufbuild/protobuf";
  */
 export const file_manifest: GenFile = /*@__PURE__*/
   fileDesc(
-    "Cg5tYW5pZmVzdC5wcm90bxIaZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEibAoQTWFuaWZlc3RFbnZlbG9wZRIaChJlbmNyeXB0ZWRfbWFuaWZlc3QYASABKAwSPAoKcmVjaXBpZW50cxgCIAMoCzIoLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLlJlY2lwaWVudEtleSJ5CgxSZWNpcGllbnRLZXkSHAoUcmVjaXBpZW50X3B1YmxpY19rZXkYASABKAwSDQoFbm9uY2UYAiABKAwSEgoKY2lwaGVydGV4dBgDIAEoDBIZChFzZW5kZXJfcHVibGljX2tleRgEIAEoDBINCgVsYWJlbBgFIAEoCSLdAQoMUm9vdE1hbmlmZXN0EkAKC2RpcmVjdG9yaWVzGAEgAygLMisuZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEuRGlyZWN0b3J5UmVjb3JkEjUKBWZpbGVzGAIgAygLMiYuZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEuRmlsZVJlY29yZBJDCg1zdWJfbWFuaWZlc3RzGAMgAygLMiwuZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEuU3ViTWFuaWZlc3RJbmRleBIPCgdjcmVhdGVkGAQgASgEImEKEFN1Yk1hbmlmZXN0SW5kZXgSEwoLbWFuaWZlc3RfaWQYASABKAkSEgoKc3RhcnRfcGF0aBgCIAEoCRIQCghlbmRfcGF0aBgDIAEoCRISCgpmaWxlX2NvdW50GAQgASgNIkQKC1N1Yk1hbmlmZXN0EjUKBWZpbGVzGAEgAygLMiYuZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEuRmlsZVJlY29yZCI+Cg9EaXJlY3RvcnlSZWNvcmQSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB2NyZWF0ZWQYAyABKAQilAEKCkZpbGVSZWNvcmQSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHNpemUYAyABKAQSFAoMY29udGVudF9oYXNoGAQgASgMEjUKBmNodW5rcxgFIAMoCzIlLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkZpbGVDaHVuaxIPCgdjcmVhdGVkGAYgASgEIqUBCglGaWxlQ2h1bmsSEAoIY2h1bmtfaWQYASABKAkSCwoDY2lkGAIgASgJEg4KBm9mZnNldBgDIAEoDRIOCgZsZW5ndGgYBCABKA0SPwoKZW5jcnlwdGlvbhgFIAEoDjIrLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkNodW5rRW5jcnlwdGlvbhIYChBlbmNyeXB0ZWRfbGVuZ3RoGAYgASgNKlMKD0NodW5rRW5jcnlwdGlvbhIgChxDSFVOS19FTkNSWVBUSU9OX1NJTkdMRV9TSE9UEAASHgoaQ0hVTktfRU5DUllQVElPTl9TVFJFQU1JTkcQAWIGcHJvdG8z",
+    "Cg5tYW5pZmVzdC5wcm90bxIaZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEiLgoQTWFuaWZlc3RFbnZlbG9wZRIaChJlbmNyeXB0ZWRfbWFuaWZlc3QYASABKAwi9wEKDFJvb3RNYW5pZmVzdBJACgtkaXJlY3RvcmllcxgBIAMoCzIrLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkRpcmVjdG9yeVJlY29yZBI1CgVmaWxlcxgCIAMoCzImLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkZpbGVSZWNvcmQSQwoNc3ViX21hbmlmZXN0cxgDIAMoCzIsLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLlN1Yk1hbmlmZXN0SW5kZXgSDwoHY3JlYXRlZBgEIAEoBBIYChBtYW5pZmVzdF92ZXJzaW9uGAUgASgNImEKEFN1Yk1hbmlmZXN0SW5kZXgSEwoLbWFuaWZlc3RfaWQYASABKAkSEgoKc3RhcnRfcGF0aBgCIAEoCRIQCghlbmRfcGF0aBgDIAEoCRISCgpmaWxlX2NvdW50GAQgASgNIkQKC1N1Yk1hbmlmZXN0EjUKBWZpbGVzGAEgAygLMiYuZmlsZW1hbmFnZXIuaXBmc3N0b3JhZ2UudjEuRmlsZVJlY29yZCI+Cg9EaXJlY3RvcnlSZWNvcmQSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB2NyZWF0ZWQYAyABKAQilAEKCkZpbGVSZWNvcmQSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHNpemUYAyABKAQSFAoMY29udGVudF9oYXNoGAQgASgMEjUKBmNodW5rcxgFIAMoCzIlLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkZpbGVDaHVuaxIPCgdjcmVhdGVkGAYgASgEIqUBCglGaWxlQ2h1bmsSEAoIY2h1bmtfaWQYASABKAkSCwoDY2lkGAIgASgJEg4KBm9mZnNldBgDIAEoDRIOCgZsZW5ndGgYBCABKA0SPwoKZW5jcnlwdGlvbhgFIAEoDjIrLmZpbGVtYW5hZ2VyLmlwZnNzdG9yYWdlLnYxLkNodW5rRW5jcnlwdGlvbhIYChBlbmNyeXB0ZWRfbGVuZ3RoGAYgASgNKlMKD0NodW5rRW5jcnlwdGlvbhIgChxDSFVOS19FTkNSWVBUSU9OX1NJTkdMRV9TSE9UEAASHgoaQ0hVTktfRU5DUllQVElPTl9TVFJFQU1JTkcQAWIGcHJvdG8z",
   );
 
 /**
- * Encrypted manifest with recipient key wrapping
+ * Encrypted root manifest envelope
  *
  * @generated from message filemanager.ipfsstorage.v1.ManifestEnvelope
  */
@@ -32,13 +32,6 @@ export type ManifestEnvelope =
      * @generated from field: bytes encrypted_manifest = 1;
      */
     encryptedManifest: Uint8Array;
-
-    /**
-     * One wrapped key per recipient device/user
-     *
-     * @generated from field: repeated filemanager.ipfsstorage.v1.RecipientKey recipients = 2;
-     */
-    recipients: RecipientKey[];
   };
 
 /**
@@ -49,57 +42,6 @@ export const ManifestEnvelopeSchema: GenMessage<
   ManifestEnvelope
 > = /*@__PURE__*/
   messageDesc(file_manifest, 0);
-
-/**
- * Wrapped symmetric key for a single recipient
- *
- * @generated from message filemanager.ipfsstorage.v1.RecipientKey
- */
-export type RecipientKey =
-  & Message<"filemanager.ipfsstorage.v1.RecipientKey">
-  & {
-    /**
-     * Recipient's X25519 public key (32 bytes)
-     *
-     * @generated from field: bytes recipient_public_key = 1;
-     */
-    recipientPublicKey: Uint8Array;
-
-    /**
-     * Nonce used for crypto_box (24 bytes)
-     *
-     * @generated from field: bytes nonce = 2;
-     */
-    nonce: Uint8Array;
-
-    /**
-     * Encrypted manifest key (48 bytes: 32 key + 16 auth tag)
-     *
-     * @generated from field: bytes ciphertext = 3;
-     */
-    ciphertext: Uint8Array;
-
-    /**
-     * Sender's X25519 public key (32 bytes)
-     *
-     * @generated from field: bytes sender_public_key = 4;
-     */
-    senderPublicKey: Uint8Array;
-
-    /**
-     * Optional device/user label (e.g., "MacBook Pro", "iPhone")
-     *
-     * @generated from field: string label = 5;
-     */
-    label: string;
-  };
-
-/**
- * Describes the message filemanager.ipfsstorage.v1.RecipientKey.
- * Use `create(RecipientKeySchema)` to create a new message.
- */
-export const RecipientKeySchema: GenMessage<RecipientKey> = /*@__PURE__*/
-  messageDesc(file_manifest, 1);
 
 /**
  * Root manifest containing directory structure and file index
@@ -136,6 +78,13 @@ export type RootManifest =
      * @generated from field: uint64 created = 4;
      */
     created: bigint;
+
+    /**
+     * Manifest schema version
+     *
+     * @generated from field: uint32 manifest_version = 5;
+     */
+    manifestVersion: number;
   };
 
 /**
@@ -143,7 +92,7 @@ export type RootManifest =
  * Use `create(RootManifestSchema)` to create a new message.
  */
 export const RootManifestSchema: GenMessage<RootManifest> = /*@__PURE__*/
-  messageDesc(file_manifest, 2);
+  messageDesc(file_manifest, 1);
 
 /**
  * Index entry for a sub-manifest (for batches with many files)
@@ -189,7 +138,7 @@ export type SubManifestIndex =
 export const SubManifestIndexSchema: GenMessage<
   SubManifestIndex
 > = /*@__PURE__*/
-  messageDesc(file_manifest, 3);
+  messageDesc(file_manifest, 2);
 
 /**
  * Sub-manifest containing a portion of file records
@@ -210,7 +159,7 @@ export type SubManifest = Message<"filemanager.ipfsstorage.v1.SubManifest"> & {
  * Use `create(SubManifestSchema)` to create a new message.
  */
 export const SubManifestSchema: GenMessage<SubManifest> = /*@__PURE__*/
-  messageDesc(file_manifest, 4);
+  messageDesc(file_manifest, 3);
 
 /**
  * Directory entry in the batch
@@ -247,7 +196,7 @@ export type DirectoryRecord =
  * Use `create(DirectoryRecordSchema)` to create a new message.
  */
 export const DirectoryRecordSchema: GenMessage<DirectoryRecord> = /*@__PURE__*/
-  messageDesc(file_manifest, 5);
+  messageDesc(file_manifest, 4);
 
 /**
  * File entry in the batch
@@ -303,7 +252,7 @@ export type FileRecord = Message<"filemanager.ipfsstorage.v1.FileRecord"> & {
  * Use `create(FileRecordSchema)` to create a new message.
  */
 export const FileRecordSchema: GenMessage<FileRecord> = /*@__PURE__*/
-  messageDesc(file_manifest, 6);
+  messageDesc(file_manifest, 5);
 
 /**
  * Chunk reference within a file
@@ -359,7 +308,7 @@ export type FileChunk = Message<"filemanager.ipfsstorage.v1.FileChunk"> & {
  * Use `create(FileChunkSchema)` to create a new message.
  */
 export const FileChunkSchema: GenMessage<FileChunk> = /*@__PURE__*/
-  messageDesc(file_manifest, 7);
+  messageDesc(file_manifest, 6);
 
 /**
  * Chunk encryption method
@@ -368,7 +317,7 @@ export const FileChunkSchema: GenMessage<FileChunk> = /*@__PURE__*/
  */
 export enum ChunkEncryption {
   /**
-   * Default: single-shot encryption for chunks <= 10MB
+   * Default: single-shot encryption for chunks <= 16 MiB
    *
    * @generated from enum value: CHUNK_ENCRYPTION_SINGLE_SHOT = 0;
    */

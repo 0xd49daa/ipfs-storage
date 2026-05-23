@@ -3,11 +3,9 @@ import { IpfsFetchError, IpfsUploadError } from "../src/ipfs-client.ts";
 import { afterAll, beforeAll } from "@std/testing/bdd";
 import {
   type ContentHash,
-  deriveEncryptionKeyPair,
-  deriveSeed,
   hashBlake2b,
   preloadSodium,
-  type X25519KeyPair,
+  type SymmetricKey,
 } from "@0xd49daa/safecrypt";
 import { CarBufferReader } from "@ipld/car";
 import * as raw from "multiformats/codecs/raw";
@@ -154,13 +152,12 @@ export function createTestClient(): IpfsClient {
   return new HttpIpfsClient(IPFS_API_URL);
 }
 
-export async function createTestKeyPair(
-  index: number = 0,
-): Promise<X25519KeyPair> {
-  const seed = await deriveSeed(
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-  );
-  return deriveEncryptionKeyPair(seed, index);
+export function createTestManifestKey(index: number = 0): SymmetricKey {
+  return new Uint8Array(32).fill(index & 0xff) as SymmetricKey;
+}
+
+export function createTestBatchId(index: number = 0): Uint8Array {
+  return new Uint8Array(16).fill(index & 0xff);
 }
 
 export async function createStreamingFileInput(

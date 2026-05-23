@@ -4,27 +4,15 @@
  * Builds, splits, and encrypts manifests for IPFS batch storage.
  */
 
-import {
-  encrypt,
-  generateKey,
-  type SymmetricKey,
-  wrapKeyAuthenticatedMulti,
-  type X25519KeyPair,
-} from "@0xd49daa/safecrypt";
+import type { SymmetricKey } from "@0xd49daa/safecrypt";
 
-import { MANIFEST_DOMAIN, SUB_MANIFEST_SIZE } from "./constants.ts";
+import { MANIFEST_VERSION_SUPPORTED, SUB_MANIFEST_SIZE } from "./constants.ts";
 import { ValidationError } from "./errors.ts";
-import {
-  encodeManifestEnvelope,
-  encodeRootManifest,
-  encodeSubManifest,
-} from "./serialization.ts";
+import { encodeRootManifest, encodeSubManifest } from "./serialization.ts";
+import { encryptVaultManifestRecord } from "./vault-aead.ts";
 import type {
   DirectoryInfo,
   FileInfo,
-  ManifestEnvelopeData,
-  RecipientInfo,
-  RecipientKeyInfo,
   RootManifestData,
   SubManifestData,
   SubManifestIndexEntry,
@@ -74,21 +62,19 @@ export interface ManifestBuildResult {
 export interface EncryptManifestInput {
   /** Built manifest result from buildManifest() */
   manifest: ManifestBuildResult;
-  /** Recipient public keys with optional labels */
-  recipients: RecipientInfo[];
-  /** Sender's X25519 key pair for authenticated wrapping */
-  senderKeyPair: X25519KeyPair;
-  /** Optional: pre-generated manifest key (for testing determinism) */
-  manifestKey?: SymmetricKey;
+  /** Caller-derived manifest key */
+  manifestKey: SymmetricKey;
+  /** Caller-supplied batch id for locator prefix and AAD */
+  batchId: Uint8Array;
 }
 
 /**
  * Result of encrypting manifests.
  */
 export interface EncryptedManifestResult {
-  /** Encrypted envelope (ManifestEnvelopeData encoded to Protobuf) */
+  /** Root manifest blob: 16-byte batch_id locator prefix + AEAD record */
   envelope: Uint8Array;
-  /** Encrypted sub-manifests (nonce + ciphertext concatenated) */
+  /** Encrypted sub-manifests as pure AEAD records */
   encryptedSubManifests: Uint8Array[];
   /** The manifest key (returned to caller for storage) */
   manifestKey: SymmetricKey;
@@ -104,10 +90,10 @@ export interface BuildAndEncryptManifestInput {
   directories: DirectoryInfo[];
   /** Batch creation timestamp (Unix ms) */
   created: number;
-  /** Recipient public keys with optional labels */
-  recipients: RecipientInfo[];
-  /** Sender's X25519 key pair for authenticated wrapping */
-  senderKeyPair: X25519KeyPair;
+  /** Caller-derived manifest key */
+  manifestKey: SymmetricKey;
+  /** Caller-supplied batch id for locator prefix and AAD */
+  batchId: Uint8Array;
   /** Build options */
   options?: BuildManifestOptions;
 }
@@ -238,6 +224,7 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
 
   // Try building without splitting first
   const testManifest: RootManifestData = {
+    manifestVersion: MANIFEST_VERSION_SUPPORTED,
     directories,
     files: sortedFiles,
     subManifests: [],
@@ -265,6 +252,7 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
 
   // Build root manifest (directories only, files are in sub-manifests)
   const rootManifest: RootManifestData = {
+    manifestVersion: MANIFEST_VERSION_SUPPORTED,
     directories,
     files: [], // Files are in sub-manifests
     subManifests: index,
@@ -283,88 +271,43 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
 // ============================================================================
 
 /**
- * Combine nonce and ciphertext into a single Uint8Array.
- */
-function combineNonceAndCiphertext(encrypted: {
-  nonce: Uint8Array;
-  ciphertext: Uint8Array;
-}): Uint8Array {
-  const combined = new Uint8Array(
-    encrypted.nonce.length + encrypted.ciphertext.length,
-  );
-  combined.set(encrypted.nonce, 0);
-  combined.set(encrypted.ciphertext, encrypted.nonce.length);
-  return combined;
-}
-
-/**
- * Encrypt manifest and wrap key for recipients.
+ * Encrypt manifest with the caller-provided manifest key.
  *
- * Root and sub-manifests are encrypted with different domain contexts
- * to prevent cross-usage attacks.
+ * Root gets the Vault plaintext batch_id locator prefix. Sub-manifests are
+ * stored as pure Vault AEAD records with sequential manifest_node_id >= 1.
  *
- * @param input - Encrypt input with manifest, recipients, sender key pair
+ * @param input - Encrypt input with manifest and manifest key
  * @returns Encrypted envelope, sub-manifests, and manifest key
- * @throws ValidationError if recipients array is empty
  */
 export async function encryptManifest(
   input: EncryptManifestInput,
 ): Promise<EncryptedManifestResult> {
-  const { manifest, recipients, senderKeyPair } = input;
+  const { manifest, manifestKey, batchId } = input;
 
-  // Validate recipients first - cannot wrap key for zero recipients
-  if (recipients.length === 0) {
-    throw new ValidationError("At least one recipient is required");
-  }
-
-  // Generate or use provided manifest key
-  const manifestKey = input.manifestKey ?? (await generateKey());
-
-  // Encrypt root manifest with ROOT domain context
-  const rootContext = new TextEncoder().encode(MANIFEST_DOMAIN.ROOT);
-  const encryptedRoot = await encrypt(
-    manifest.rootManifest,
+  const encryptedRoot = await encryptVaultManifestRecord({
+    plaintext: manifest.rootManifest,
     manifestKey,
-    rootContext,
-  );
+    batchId,
+    manifestNodeId: 0,
+  });
 
-  // Encrypt sub-manifests with SUB domain context
-  const subContext = new TextEncoder().encode(MANIFEST_DOMAIN.SUB);
   const encryptedSubManifests = await Promise.all(
-    manifest.subManifests.map(async (subManifest) => {
-      const encrypted = await encrypt(subManifest, manifestKey, subContext);
-      return combineNonceAndCiphertext(encrypted);
+    manifest.subManifests.map((subManifest, index) => {
+      return encryptVaultManifestRecord({
+        plaintext: subManifest,
+        manifestKey,
+        batchId,
+        manifestNodeId: index + 1,
+      });
     }),
   );
 
-  // Wrap manifest key for all recipients
-  const recipientPublicKeys = recipients.map((r) => r.publicKey);
-  const wrappedKeys = await wrapKeyAuthenticatedMulti(
-    manifestKey,
-    recipientPublicKeys,
-    senderKeyPair,
-  );
-
-  // Build recipient key info with labels
-  const recipientKeyInfos: RecipientKeyInfo[] = wrappedKeys.map((
-    wrapped,
-    i,
-  ) => ({
-    recipientPublicKey: recipients[i]!.publicKey,
-    nonce: wrapped.nonce,
-    ciphertext: wrapped.ciphertext,
-    senderPublicKey: wrapped.senderPublicKey,
-    label: recipients[i]!.label,
-  }));
-
-  // Build envelope
-  const envelopeData: ManifestEnvelopeData = {
-    encryptedManifest: combineNonceAndCiphertext(encryptedRoot),
-    recipients: recipientKeyInfos,
-  };
+  const rootBlob = new Uint8Array(batchId.length + encryptedRoot.length);
+  rootBlob.set(batchId, 0);
+  rootBlob.set(encryptedRoot, batchId.length);
 
   return {
-    envelope: encodeManifestEnvelope(envelopeData),
+    envelope: rootBlob,
     encryptedSubManifests,
     manifestKey,
   };
@@ -377,7 +320,6 @@ export async function encryptManifest(
  *
  * @param input - Combined build and encrypt input
  * @returns Encrypted envelope, sub-manifests, and manifest key
- * @throws ValidationError if recipients array is empty
  */
 export async function buildAndEncryptManifest(
   input: BuildAndEncryptManifestInput,
@@ -391,7 +333,7 @@ export async function buildAndEncryptManifest(
 
   return encryptManifest({
     manifest,
-    recipients: input.recipients,
-    senderKeyPair: input.senderKeyPair,
+    manifestKey: input.manifestKey,
+    batchId: input.batchId,
   });
 }

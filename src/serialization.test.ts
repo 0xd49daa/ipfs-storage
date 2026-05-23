@@ -1,5 +1,6 @@
 import { beforeAll, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
+import { create, toBinary } from "@bufbuild/protobuf";
 import {
   decodeManifestEnvelope,
   decodeRootManifest,
@@ -8,11 +9,12 @@ import {
   encodeRootManifest,
   encodeSubManifest,
 } from "./serialization.ts";
+import { RootManifestSchema } from "./gen/manifest_pb.ts";
+import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
 import {
   ChunkEncryption,
   type FileInfo,
   type ManifestEnvelopeData,
-  type RecipientKeyInfo,
   type RootManifestData,
   type SubManifestData,
 } from "./types.ts";
@@ -22,12 +24,7 @@ import {
   preloadSodium,
   randomBytes,
 } from "@0xd49daa/safecrypt";
-import type { ContentHash, X25519PublicKey } from "@0xd49daa/safecrypt";
-
-// Helper to create a mock X25519PublicKey (32 bytes)
-async function mockX25519PublicKey(): Promise<X25519PublicKey> {
-  return (await randomBytes(32)) as X25519PublicKey;
-}
+import type { ContentHash } from "@0xd49daa/safecrypt";
 
 // Helper to create a content hash
 async function mockContentHash(): Promise<ContentHash> {
@@ -41,87 +38,15 @@ describe("Phase 1: Serialization", () => {
   });
 
   describe("ManifestEnvelope", () => {
-    test("round-trip with single recipient", async () => {
-      const recipientPubKey = await mockX25519PublicKey();
-      const senderPubKey = await mockX25519PublicKey();
-
+    test("round-trip encrypted manifest bytes", () => {
       const original: ManifestEnvelopeData = {
         encryptedManifest: new Uint8Array([1, 2, 3, 4, 5]),
-        recipients: [
-          {
-            recipientPublicKey: recipientPubKey,
-            nonce: await randomBytes(24),
-            ciphertext: await randomBytes(48),
-            senderPublicKey: senderPubKey,
-            label: "MacBook Pro",
-          },
-        ],
       };
 
       const encoded = encodeManifestEnvelope(original);
       const decoded = decodeManifestEnvelope(encoded);
 
       expect(decoded.encryptedManifest).toEqual(original.encryptedManifest);
-      expect(decoded.recipients.length).toBe(1);
-      expect(decoded.recipients[0]!.recipientPublicKey).toEqual(
-        recipientPubKey,
-      );
-      expect(decoded.recipients[0]!.nonce).toEqual(
-        original.recipients[0]!.nonce,
-      );
-      expect(decoded.recipients[0]!.ciphertext).toEqual(
-        original.recipients[0]!.ciphertext,
-      );
-      expect(decoded.recipients[0]!.senderPublicKey).toEqual(senderPubKey);
-      expect(decoded.recipients[0]!.label).toBe("MacBook Pro");
-    });
-
-    test("round-trip with multiple recipients", async () => {
-      const recipients: RecipientKeyInfo[] = [];
-      const senderPubKey = await mockX25519PublicKey();
-
-      for (let i = 0; i < 5; i++) {
-        recipients.push({
-          recipientPublicKey: await mockX25519PublicKey(),
-          nonce: await randomBytes(24),
-          ciphertext: await randomBytes(48),
-          senderPublicKey: senderPubKey,
-          label: `Device ${i}`,
-        });
-      }
-
-      const original: ManifestEnvelopeData = {
-        encryptedManifest: await randomBytes(1000),
-        recipients,
-      };
-
-      const encoded = encodeManifestEnvelope(original);
-      const decoded = decodeManifestEnvelope(encoded);
-
-      expect(decoded.recipients.length).toBe(5);
-      for (let i = 0; i < 5; i++) {
-        expect(decoded.recipients[i]!.label).toBe(`Device ${i}`);
-      }
-    });
-
-    test("handles empty label", async () => {
-      const original: ManifestEnvelopeData = {
-        encryptedManifest: new Uint8Array([1]),
-        recipients: [
-          {
-            recipientPublicKey: await mockX25519PublicKey(),
-            nonce: await randomBytes(24),
-            ciphertext: await randomBytes(48),
-            senderPublicKey: await mockX25519PublicKey(),
-            // No label
-          },
-        ],
-      };
-
-      const encoded = encodeManifestEnvelope(original);
-      const decoded = decodeManifestEnvelope(encoded);
-
-      expect(decoded.recipients[0]!.label).toBeUndefined();
     });
   });
 
@@ -130,6 +55,7 @@ describe("Phase 1: Serialization", () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [
           { path: "/photos", name: "photos", created: 1700000000000 },
           { path: "/photos/2024", name: "2024", created: 1700000000000 },
@@ -185,6 +111,7 @@ describe("Phase 1: Serialization", () => {
 
     test("round-trip with sub-manifests", async () => {
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [],
         files: [],
         subManifests: [
@@ -215,6 +142,7 @@ describe("Phase 1: Serialization", () => {
 
     test("handles empty arrays", async () => {
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [],
         files: [],
         subManifests: [],
@@ -233,29 +161,30 @@ describe("Phase 1: Serialization", () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [],
         files: [
           {
             path: "/large-file.bin",
             name: "large-file.bin",
-            size: 25 * 1024 * 1024, // 25MB
+            size: 25 * 1024 * 1024, // 25 MiB
             contentHash,
             chunks: [
               {
                 chunkId: "chunk1chunk1chunk1chun",
                 cid: "cid1",
                 offset: 0,
-                length: 10 * 1024 * 1024,
+                length: 16 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 10 * 1024 * 1024 + 40,
+                encryptedLength: 16 * 1024 * 1024 + 40,
               },
               {
                 chunkId: "chunk2chunk2chunk2chun",
                 cid: "cid2",
                 offset: 0,
-                length: 10 * 1024 * 1024,
+                length: 9 * 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
-                encryptedLength: 10 * 1024 * 1024 + 40,
+                encryptedLength: 9 * 1024 * 1024 + 40,
               },
               {
                 chunkId: "chunk3chunk3chunk3chun",
@@ -283,6 +212,7 @@ describe("Phase 1: Serialization", () => {
       const contentHash = await mockContentHash();
 
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [],
         files: [
           {
@@ -319,6 +249,7 @@ describe("Phase 1: Serialization", () => {
       const futureTimestamp = 4102444800000; // Year 2100
 
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [
           { path: "/test", name: "test", created: futureTimestamp },
         ],
@@ -378,6 +309,7 @@ describe("Phase 1: Serialization", () => {
       );
 
       const original: RootManifestData = {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED,
         directories: [],
         files: [
           {
@@ -445,75 +377,31 @@ describe("Phase 1: Serialization", () => {
   });
 
   describe("validation", () => {
-    test("throws on invalid nonce size in encode", async () => {
-      const envelope: ManifestEnvelopeData = {
-        encryptedManifest: new Uint8Array([1]),
-        recipients: [
-          {
-            recipientPublicKey: await mockX25519PublicKey(),
-            nonce: new Uint8Array(16), // Wrong size (should be 24)
-            ciphertext: await randomBytes(48),
-            senderPublicKey: await mockX25519PublicKey(),
-          },
-        ],
-      };
-
-      expect(() => encodeManifestEnvelope(envelope)).toThrow(
-        "Invalid nonce: expected 24 bytes",
-      );
+    test("throws on unsupported manifest version in encode", () => {
+      expect(() =>
+        encodeRootManifest({
+          manifestVersion: MANIFEST_VERSION_SUPPORTED + 1,
+          directories: [],
+          files: [],
+          subManifests: [],
+          created: 1700000000000,
+        })
+      ).toThrow(/Unsupported manifest version/);
     });
 
-    test("throws on invalid ciphertext size in encode", async () => {
-      const envelope: ManifestEnvelopeData = {
-        encryptedManifest: new Uint8Array([1]),
-        recipients: [
-          {
-            recipientPublicKey: await mockX25519PublicKey(),
-            nonce: await randomBytes(24),
-            ciphertext: new Uint8Array(32), // Wrong size (should be 48)
-            senderPublicKey: await mockX25519PublicKey(),
-          },
-        ],
-      };
+    test("throws on unsupported manifest version in decode", () => {
+      const unsupported = create(RootManifestSchema, {
+        manifestVersion: MANIFEST_VERSION_SUPPORTED + 1,
+        directories: [],
+        files: [],
+        subManifests: [],
+        created: 1700000000000n,
+      });
+      const encoded = toBinary(RootManifestSchema, unsupported);
 
-      expect(() => encodeManifestEnvelope(envelope)).toThrow(
-        "Invalid wrapped key ciphertext: expected 48 bytes",
+      expect(() => decodeRootManifest(encoded)).toThrow(
+        /Unsupported manifest version/,
       );
-    });
-
-    test("throws on invalid public key size in decode", async () => {
-      // Create a valid envelope first
-      const validEnvelope: ManifestEnvelopeData = {
-        encryptedManifest: new Uint8Array([1]),
-        recipients: [
-          {
-            recipientPublicKey: await mockX25519PublicKey(),
-            nonce: await randomBytes(24),
-            ciphertext: await randomBytes(48),
-            senderPublicKey: await mockX25519PublicKey(),
-          },
-        ],
-      };
-      const encoded = encodeManifestEnvelope(validEnvelope);
-
-      // Corrupt it by changing the public key length in the binary
-      // This is hard to do precisely, so we'll test via the ValidationError export instead
-      // Just verify the error type is thrown for wrong-sized key
-      expect(() => {
-        // Manually construct invalid data
-        const invalidKey = new Uint8Array(16); // Wrong size
-        const info = {
-          recipientPublicKey: invalidKey as any,
-          nonce: new Uint8Array(24),
-          ciphertext: new Uint8Array(48),
-          senderPublicKey: new Uint8Array(32) as any,
-        };
-        // This would fail validation
-        encodeManifestEnvelope({
-          encryptedManifest: new Uint8Array([1]),
-          recipients: [info],
-        });
-      }).toThrow("Invalid X25519 public key");
     });
   });
 });

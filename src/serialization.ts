@@ -1,7 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { asContentHash, SIZES } from "@0xd49daa/safecrypt";
-import type { ContentHash, X25519PublicKey } from "@0xd49daa/safecrypt";
+import { asContentHash } from "@0xd49daa/safecrypt";
 import { ValidationError } from "./errors.ts";
+import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
 
 import {
   type DirectoryRecord,
@@ -12,8 +12,6 @@ import {
   FileRecordSchema,
   type ManifestEnvelope,
   ManifestEnvelopeSchema,
-  type RecipientKey,
-  RecipientKeySchema,
   type RootManifest,
   RootManifestSchema,
   type SubManifest,
@@ -27,48 +25,10 @@ import type {
   DirectoryInfo,
   FileInfo,
   ManifestEnvelopeData,
-  RecipientKeyInfo,
   RootManifestData,
   SubManifestData,
   SubManifestIndexEntry,
 } from "./types.ts";
-
-// ============================================================================
-// Local validation helpers
-// ============================================================================
-
-/** Expected nonce size for crypto_box (24 bytes) */
-const NONCE_SIZE = 24;
-
-/** Expected ciphertext size for wrapped key (32 key + 16 auth tag = 48 bytes) */
-const WRAPPED_KEY_CIPHERTEXT_SIZE = 48;
-
-function validateX25519PublicKey(bytes: Uint8Array): X25519PublicKey {
-  if (bytes.length !== SIZES.X25519_PUBLIC_KEY) {
-    throw new ValidationError(
-      `Invalid X25519 public key: expected ${SIZES.X25519_PUBLIC_KEY} bytes, got ${bytes.length}`,
-    );
-  }
-  return bytes as X25519PublicKey;
-}
-
-function validateNonce(bytes: Uint8Array): Uint8Array {
-  if (bytes.length !== NONCE_SIZE) {
-    throw new ValidationError(
-      `Invalid nonce: expected ${NONCE_SIZE} bytes, got ${bytes.length}`,
-    );
-  }
-  return bytes;
-}
-
-function validateWrappedKeyCiphertext(bytes: Uint8Array): Uint8Array {
-  if (bytes.length !== WRAPPED_KEY_CIPHERTEXT_SIZE) {
-    throw new ValidationError(
-      `Invalid wrapped key ciphertext: expected ${WRAPPED_KEY_CIPHERTEXT_SIZE} bytes, got ${bytes.length}`,
-    );
-  }
-  return bytes;
-}
 
 /**
  * Safely convert bigint to number, throwing if precision would be lost.
@@ -97,7 +57,6 @@ function bigintToNumber(value: bigint, fieldName: string): number {
 export function encodeManifestEnvelope(data: ManifestEnvelopeData): Uint8Array {
   const envelope = create(ManifestEnvelopeSchema, {
     encryptedManifest: data.encryptedManifest,
-    recipients: data.recipients.map(recipientKeyInfoToProto),
   });
   return toBinary(ManifestEnvelopeSchema, envelope);
 }
@@ -106,11 +65,13 @@ export function encodeManifestEnvelope(data: ManifestEnvelopeData): Uint8Array {
  * Encode RootManifestData to binary protobuf.
  */
 export function encodeRootManifest(data: RootManifestData): Uint8Array {
+  validateManifestVersion(data.manifestVersion);
   const manifest = create(RootManifestSchema, {
     directories: data.directories.map(directoryInfoToProto),
     files: data.files.map(fileInfoToProto),
     subManifests: data.subManifests.map(subManifestIndexToProto),
     created: BigInt(data.created),
+    manifestVersion: data.manifestVersion,
   });
   return toBinary(RootManifestSchema, manifest);
 }
@@ -138,7 +99,6 @@ export function decodeManifestEnvelope(
   const envelope = fromBinary(ManifestEnvelopeSchema, bytes);
   return {
     encryptedManifest: envelope.encryptedManifest,
-    recipients: envelope.recipients.map(recipientKeyProtoToInfo),
   };
 }
 
@@ -147,7 +107,9 @@ export function decodeManifestEnvelope(
  */
 export function decodeRootManifest(bytes: Uint8Array): RootManifestData {
   const manifest = fromBinary(RootManifestSchema, bytes);
+  validateManifestVersion(manifest.manifestVersion);
   return {
+    manifestVersion: manifest.manifestVersion,
     directories: manifest.directories.map(directoryProtoToInfo),
     files: manifest.files.map(fileProtoToInfo),
     subManifests: manifest.subManifests.map(subManifestIndexProtoToEntry),
@@ -169,19 +131,12 @@ export function decodeSubManifest(bytes: Uint8Array): SubManifestData {
 // Internal Converters: TypeScript -> Protobuf
 // ============================================================================
 
-function recipientKeyInfoToProto(info: RecipientKeyInfo): RecipientKey {
-  // Validate all byte field sizes on encode
-  validateX25519PublicKey(info.recipientPublicKey);
-  validateNonce(info.nonce);
-  validateWrappedKeyCiphertext(info.ciphertext);
-  validateX25519PublicKey(info.senderPublicKey);
-  return create(RecipientKeySchema, {
-    recipientPublicKey: info.recipientPublicKey,
-    nonce: info.nonce,
-    ciphertext: info.ciphertext,
-    senderPublicKey: info.senderPublicKey,
-    label: info.label ?? "",
-  });
+function validateManifestVersion(version: number): void {
+  if (version !== MANIFEST_VERSION_SUPPORTED) {
+    throw new ValidationError(
+      `Unsupported manifest version ${version}; supported version is ${MANIFEST_VERSION_SUPPORTED}`,
+    );
+  }
 }
 
 function directoryInfoToProto(info: DirectoryInfo): DirectoryRecord {
@@ -228,16 +183,6 @@ function subManifestIndexToProto(
 // ============================================================================
 // Internal Converters: Protobuf -> TypeScript
 // ============================================================================
-
-function recipientKeyProtoToInfo(proto: RecipientKey): RecipientKeyInfo {
-  return {
-    recipientPublicKey: validateX25519PublicKey(proto.recipientPublicKey),
-    nonce: validateNonce(proto.nonce),
-    ciphertext: validateWrappedKeyCiphertext(proto.ciphertext),
-    senderPublicKey: validateX25519PublicKey(proto.senderPublicKey),
-    label: proto.label || undefined,
-  };
-}
 
 function directoryProtoToInfo(proto: DirectoryRecord): DirectoryInfo {
   return {

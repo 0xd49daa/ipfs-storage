@@ -2,24 +2,18 @@
  * Streaming Upload Implementation
  *
  * Memory-efficient batch upload that processes files lazily from an AsyncIterable.
- * Peak memory usage: ~12MB regardless of batch size.
+ * Peak memory usage: ~18 MiB regardless of batch size.
  *
  * Architecture:
  * 1. Files processed one at a time from AsyncIterable
- * 2. Small files (<10MB) aggregated into shared chunks until 10MB
- * 3. Large files (>=10MB) streamed through dedicated 10MB chunks
+ * 2. Small files (<16 MiB) aggregated into shared chunks until 16 MiB
+ * 3. Large files (>=16 MiB) streamed through dedicated 16 MiB chunks
  * 4. Each chunk uploaded immediately as single-block CAR (no roots)
  * 5. Sub-manifests flushed when entries exceed ~1MB
  * 6. Final CAR contains directory structure linking to uploaded chunks
  */
 
-import {
-  type ContentHash,
-  generateKey,
-  randomBytes,
-  type SymmetricKey,
-} from "@0xd49daa/safecrypt";
-import { base58 } from "@scure/base";
+import { type SymmetricKey } from "@0xd49daa/safecrypt";
 import { CID } from "multiformats/cid";
 import { CarBufferWriter } from "@ipld/car";
 import * as dagPb from "@ipld/dag-pb";
@@ -43,7 +37,6 @@ import { ChunkUploadError, ValidationError } from "./errors.ts";
 import { PathManager } from "./conflicts.ts";
 import { DirectoryTreeBuilder } from "./directories.ts";
 import { chunkIdToPath, generateChunkId } from "./chunk-id.ts";
-import { deriveFileKey } from "./crypto.ts";
 import { buildManifest, encryptManifest } from "./manifest-builder.ts";
 import { computeDagPbCid, computeRawCid } from "./ipfs-client.ts";
 import { basename } from "./path-utils.ts";
@@ -51,17 +44,15 @@ import { padme } from "./padme.ts";
 import {
   CHUNK_SIZE,
   DEFAULT_RETRIES,
-  STREAMING_THRESHOLD,
+  MANIFEST_VERSION_SUPPORTED,
   SUB_MANIFEST_SIZE,
 } from "./constants.ts";
 import {
-  NONCE_SIZE,
-  SINGLE_SHOT_OVERHEAD,
-  STREAM_CHUNK_OVERHEAD,
-  STREAM_CHUNK_SIZE,
-  STREAM_HEADER_SIZE,
-} from "./constants.ts";
-import { createEncryptStream, encrypt } from "@0xd49daa/safecrypt";
+  encryptVaultChunkRecord,
+  encryptVaultManifestRecord,
+  VAULT_AES_256_KEY_SIZE,
+  VAULT_BATCH_ID_SIZE,
+} from "./vault-aead.ts";
 import { encodeSubManifest } from "./serialization.ts";
 
 // ============================================================================
@@ -85,7 +76,8 @@ interface AggregationSegment {
   fileIndex: number;
   data: Uint8Array;
   fileOffset: number;
-  contentHash: ContentHash;
+  filePathWithinBatch: string;
+  chunkIndex: number;
 }
 
 /**
@@ -95,7 +87,8 @@ interface AggregationSegment {
 interface StreamSegment {
   fileIndex: number;
   fileOffset: number;
-  contentHash: ContentHash;
+  filePathWithinBatch: string;
+  chunkIndex: number;
   size: number;
   getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>;
 }
@@ -153,7 +146,7 @@ interface ProcessingContext {
   bytesProcessed: number;
   chunksUploaded: number;
   subManifestsFlushed: number;
-  batchId: string;
+  batchId: Uint8Array;
   created: number;
 }
 
@@ -282,85 +275,24 @@ async function uploadSingleBlock(
 // ============================================================================
 
 /**
- * Encrypt data using single-shot mode.
- * Wire format: [24-byte nonce][ciphertext with 16-byte tag]
- */
-async function encryptSingleShot(
-  plaintext: Uint8Array,
-  key: SymmetricKey,
-): Promise<Uint8Array> {
-  const { nonce, ciphertext } = await encrypt(plaintext, key);
-  const result = new Uint8Array(NONCE_SIZE + ciphertext.length);
-  result.set(nonce, 0);
-  result.set(ciphertext, NONCE_SIZE);
-  return result;
-}
-
-/**
- * Encrypt data using streaming mode.
- * Wire format: [24-byte header][encrypted_chunks...]
- */
-async function encryptStreaming(
-  plaintext: Uint8Array,
-  key: SymmetricKey,
-  signal?: AbortSignal,
-): Promise<Uint8Array> {
-  const stream = await createEncryptStream(key);
-
-  try {
-    const numChunks = Math.ceil(plaintext.length / STREAM_CHUNK_SIZE);
-    const outputSize = STREAM_HEADER_SIZE + plaintext.length +
-      numChunks * STREAM_CHUNK_OVERHEAD;
-
-    const result = new Uint8Array(outputSize);
-    let writeOffset = 0;
-
-    // Write header
-    result.set(stream.header, 0);
-    writeOffset = STREAM_HEADER_SIZE;
-
-    // Process in chunks
-    let readOffset = 0;
-    while (readOffset < plaintext.length) {
-      checkAbort(signal);
-
-      const remaining = plaintext.length - readOffset;
-      const chunkLen = Math.min(STREAM_CHUNK_SIZE, remaining);
-      const isFinal = readOffset + chunkLen >= plaintext.length;
-
-      const chunk = plaintext.subarray(readOffset, readOffset + chunkLen);
-      const encrypted = stream.push(chunk, isFinal);
-
-      result.set(encrypted, writeOffset);
-      writeOffset += encrypted.length;
-      readOffset += chunkLen;
-    }
-
-    return result.subarray(0, writeOffset);
-  } finally {
-    stream.dispose();
-  }
-}
-
-/**
- * Encrypt a segment with the appropriate mode based on size.
+ * Encrypt a file segment as a Vault v0.34 canonical chunk AEAD record.
  */
 async function encryptSegment(
   plaintext: Uint8Array,
   manifestKey: SymmetricKey,
-  contentHash: ContentHash,
-  signal?: AbortSignal,
+  batchId: Uint8Array,
+  filePathWithinBatch: string,
+  chunkIndex: number,
 ): Promise<{ encrypted: Uint8Array; encryption: ChunkEncryption }> {
-  const fileKey = await deriveFileKey(manifestKey, contentHash);
-  const encryption = plaintext.length <= STREAMING_THRESHOLD
-    ? ChunkEncryption.SINGLE_SHOT
-    : ChunkEncryption.STREAMING;
+  const encrypted = await encryptVaultChunkRecord({
+    plaintext,
+    manifestKey,
+    batchId,
+    filePathWithinBatch,
+    chunkIndex,
+  });
 
-  const encrypted = encryption === ChunkEncryption.SINGLE_SHOT
-    ? await encryptSingleShot(plaintext, fileKey)
-    : await encryptStreaming(plaintext, fileKey, signal);
-
-  return { encrypted, encryption };
+  return { encrypted, encryption: ChunkEncryption.SINGLE_SHOT };
 }
 
 // ============================================================================
@@ -398,14 +330,21 @@ class AggregationBufferManager {
     fileIndex: number,
     data: Uint8Array,
     fileOffset: number,
-    contentHash: ContentHash,
+    filePathWithinBatch: string,
+    chunkIndex: number,
   ): Promise<UploadedChunk | null> {
     // Generate chunk ID on first segment
     if (this.pendingChunkId === null) {
       this.pendingChunkId = await generateChunkId();
     }
 
-    this.segments.push({ fileIndex, data, fileOffset, contentHash });
+    this.segments.push({
+      fileIndex,
+      data,
+      fileOffset,
+      filePathWithinBatch,
+      chunkIndex,
+    });
     this.totalSize += data.length;
 
     // Flush if full
@@ -423,7 +362,8 @@ class AggregationBufferManager {
    * @param fileIndex - Index of the file in the batch
    * @param size - Known file size (required for buffer management)
    * @param fileOffset - Offset within the file (always 0 for small files)
-   * @param contentHash - File content hash for key derivation
+   * @param filePathWithinBatch - Resolved path used for Vault AAD/key derivation
+   * @param chunkIndex - Per-file chunk index used for Vault AAD
    * @param getStream - Factory function to create a fresh stream
    * @returns Flushed chunk if buffer reached CHUNK_SIZE, null otherwise
    */
@@ -431,7 +371,8 @@ class AggregationBufferManager {
     fileIndex: number,
     size: number,
     fileOffset: number,
-    contentHash: ContentHash,
+    filePathWithinBatch: string,
+    chunkIndex: number,
     getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>,
   ): Promise<UploadedChunk | null> {
     // Generate chunk ID on first segment
@@ -443,7 +384,8 @@ class AggregationBufferManager {
       fileIndex,
       size,
       fileOffset,
-      contentHash,
+      filePathWithinBatch,
+      chunkIndex,
       getStream,
     });
     this.totalSize += size;
@@ -532,8 +474,9 @@ class AggregationBufferManager {
       const { encrypted } = await encryptSegment(
         plaintext,
         this.manifestKey,
-        segment.contentHash,
-        this.context.signal,
+        this.context.batchId,
+        segment.filePathWithinBatch,
+        segment.chunkIndex,
       );
 
       segmentInfos.push({
@@ -577,8 +520,9 @@ class AggregationBufferManager {
       const { encrypted } = await encryptSegment(
         plaintext,
         this.manifestKey,
-        segment.contentHash,
-        this.context.signal,
+        this.context.batchId,
+        segment.filePathWithinBatch,
+        segment.chunkIndex,
       );
 
       segmentInfos.push({
@@ -719,10 +663,11 @@ async function readExactly(
 
 /**
  * Process a large file through dedicated streaming chunks.
- * Each 10MB chunk is uploaded immediately after encryption.
+ * Each 16 MiB chunk is uploaded immediately after encryption.
  */
 async function processLargeFile(
   file: StreamingFileInput,
+  resolvedPath: string,
   fileIndex: number,
   context: ProcessingContext,
 ): Promise<ChunkRef[]> {
@@ -732,7 +677,7 @@ async function processLargeFile(
 
   let fileOffset = 0;
   let remainingSize = file.size;
-  const isLastFile = false; // We don't know if this is last file yet
+  let chunkIndex = 0;
 
   // Buffer for accumulating stream data into CHUNK_SIZE pieces
   let buffer = new Uint8Array(0);
@@ -770,8 +715,9 @@ async function processLargeFile(
     const { encrypted, encryption } = await encryptSegment(
       chunkData,
       context.manifestKey,
-      file.contentHash,
-      context.signal,
+      context.batchId,
+      resolvedPath,
+      chunkIndex,
     );
 
     checkAbort(context.signal);
@@ -821,6 +767,7 @@ async function processLargeFile(
 
     fileOffset += chunkData.length;
     remainingSize -= chunkData.length;
+    chunkIndex++;
   }
 
   return chunkRefs;
@@ -892,16 +839,12 @@ class IncrementalManifestBuilder {
     const subManifestData = { files: sortedFiles };
     const serialized = encodeSubManifest(subManifestData);
 
-    // Encrypt with sub-manifest domain
-    const fileKey = await deriveFileKey(
-      this.manifestKey,
-      new Uint8Array(32) as ContentHash,
-    );
-    // Note: Sub-manifests use a different encryption context, but for simplicity we use same pattern
-    const { nonce, ciphertext } = await encrypt(serialized, this.manifestKey);
-    const encrypted = new Uint8Array(NONCE_SIZE + ciphertext.length);
-    encrypted.set(nonce, 0);
-    encrypted.set(ciphertext, NONCE_SIZE);
+    const encrypted = await encryptVaultManifestRecord({
+      plaintext: serialized,
+      manifestKey: this.manifestKey,
+      batchId: this.context.batchId,
+      manifestNodeId: this.flushedSubManifests.length + 1,
+    });
 
     checkAbort(this.context.signal);
 
@@ -1157,13 +1100,13 @@ async function buildFinalCar(
  *
  * Memory-efficient implementation that:
  * - Processes files lazily from AsyncIterable
- * - Aggregates small files into ~10MB chunks
- * - Streams large files through ~10MB dedicated chunks
+ * - Aggregates small files into ~16 MiB chunks
+ * - Streams large files through ~16 MiB dedicated chunks
  * - Flushes sub-manifests incrementally (~1MB threshold)
  * - Uploads chunks immediately as single-block CARs
  * - Builds final CAR with directory structure at the end
  *
- * Peak memory usage: ~12MB regardless of batch size.
+ * Peak memory usage: ~18 MiB regardless of batch size.
  *
  * @param files - Async iterable of files to upload
  * @param options - Upload options
@@ -1175,17 +1118,32 @@ export async function uploadBatch(
   options: UploadOptions,
   ipfsClient: IpfsClient,
 ): Promise<BatchResult> {
+  // === VALIDATION ===
+  if (!options || typeof options !== "object") {
+    throw new ValidationError("options must be an object");
+  }
+  if (!options.manifestKey) {
+    throw new ValidationError("manifestKey is required");
+  }
+  if (options.manifestKey.length !== VAULT_AES_256_KEY_SIZE) {
+    throw new ValidationError(
+      `manifestKey must be ${VAULT_AES_256_KEY_SIZE} bytes, got ${options.manifestKey.length}`,
+    );
+  }
+  if (!options.batch_id) {
+    throw new ValidationError("batch_id is required");
+  }
+  if (options.batch_id.length !== VAULT_BATCH_ID_SIZE) {
+    throw new ValidationError(
+      `batch_id must be ${VAULT_BATCH_ID_SIZE} bytes, got ${options.batch_id.length}`,
+    );
+  }
   const { signal, onProgress, onChunkUploaded, onSubManifestFlushed } = options;
 
-  // === VALIDATION ===
-  if (options.recipients.length === 0) {
-    throw new ValidationError("At least one recipient is required");
-  }
-
   // === INITIALIZE STATE ===
-  const batchId = base58.encode(await randomBytes(16));
+  const batchId = options.batch_id;
   const created = Date.now();
-  const manifestKey = await generateKey();
+  const manifestKey = options.manifestKey;
 
   // Build context
   const context: ProcessingContext = {
@@ -1299,7 +1257,12 @@ export async function uploadBatch(
       updateChunkRefsForFlushedChunk(pendingChunk);
 
       // Process large file
-      chunkRefs = await processLargeFile(file, fileIndex, context);
+      chunkRefs = await processLargeFile(
+        file,
+        resolvedPath,
+        fileIndex,
+        context,
+      );
 
       context.bytesProcessed += file.size;
     } else {
@@ -1315,13 +1278,16 @@ export async function uploadBatch(
         fileIndex,
         file.size,
         0,
-        file.contentHash,
+        resolvedPath,
+        0,
         file.getStream,
       );
 
       // Build ChunkRef from buffer state
       // We need to track which chunk this file ended up in
       if (flushedChunk) {
+        updateChunkRefsForFlushedChunk(flushedChunk);
+
         // File was part of flushed chunk
         const segInfo = flushedChunk.segments.find((s) =>
           s.fileIndex === fileIndex
@@ -1398,9 +1364,8 @@ export async function uploadBatch(
   // Encrypt manifest
   const { envelope, encryptedSubManifests } = await encryptManifest({
     manifest: manifestResult,
-    recipients: options.recipients,
-    senderKeyPair: options.senderKeyPair,
     manifestKey,
+    batchId,
   });
 
   // Build chunk CID map for final CAR
@@ -1435,8 +1400,8 @@ export async function uploadBatch(
   // === BUILD RESULT ===
   const batchManifest: BatchManifest = {
     cid: finalCarResult.rootCid,
+    manifestVersion: MANIFEST_VERSION_SUPPORTED,
     manifestKey,
-    senderPublicKey: options.senderKeyPair.publicKey,
     directories: context.directories,
     files: context.fileInfos,
     created,

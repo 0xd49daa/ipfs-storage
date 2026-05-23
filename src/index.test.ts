@@ -29,8 +29,8 @@ describe("Phase 0: Foundation", () => {
       expect(encoded.length).toBe(24);
     });
 
-    test("CHUNK_SIZE is 10MB", () => {
-      expect(CHUNK_SIZE).toBe(10 * 1024 * 1024);
+    test("CHUNK_SIZE is 16 MiB", () => {
+      expect(CHUNK_SIZE).toBe(16 * 1024 * 1024);
     });
   });
 

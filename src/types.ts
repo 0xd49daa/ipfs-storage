@@ -1,9 +1,4 @@
-import type {
-  ContentHash,
-  SymmetricKey,
-  X25519KeyPair,
-  X25519PublicKey,
-} from "@0xd49daa/safecrypt";
+import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
 
 // Re-export ChunkEncryption from generated protobuf
 export { ChunkEncryption } from "./gen/manifest_pb.ts";
@@ -112,31 +107,15 @@ export interface SubManifestIndexEntry {
 }
 
 /**
- * Recipient key wrapping information.
- */
-export interface RecipientKeyInfo {
-  /** Recipient's X25519 public key */
-  recipientPublicKey: X25519PublicKey;
-  /** Nonce used for crypto_box (24 bytes) */
-  nonce: Uint8Array;
-  /** Encrypted manifest key (48 bytes) */
-  ciphertext: Uint8Array;
-  /** Sender's X25519 public key */
-  senderPublicKey: X25519PublicKey;
-  /** Optional device/user label */
-  label?: string;
-}
-
-/**
  * Decrypted batch manifest.
  */
 export interface BatchManifest {
   /** Batch root CID */
   cid: string;
+  /** Manifest schema version */
+  manifestVersion: number;
   /** Manifest encryption key */
   manifestKey: SymmetricKey;
-  /** Sender's X25519 public key */
-  senderPublicKey: X25519PublicKey;
   /** All directories in the batch */
   directories: DirectoryInfo[];
   /** All files in the batch */
@@ -149,6 +128,8 @@ export interface BatchManifest {
  * Root manifest structure (before encryption).
  */
 export interface RootManifestData {
+  /** Manifest schema version */
+  manifestVersion: number;
   /** All directories in the batch */
   directories: DirectoryInfo[];
   /** Files in root manifest */
@@ -168,24 +149,11 @@ export interface SubManifestData {
 }
 
 /**
- * Manifest envelope (encrypted manifest + recipient keys).
+ * Manifest envelope containing encrypted root manifest bytes.
  */
 export interface ManifestEnvelopeData {
   /** Encrypted manifest bytes */
   encryptedManifest: Uint8Array;
-  /** Recipient key wrapping records */
-  recipients: RecipientKeyInfo[];
-}
-
-/**
- * Recipient information for upload operations.
- * Used to specify who can decrypt the manifest.
- */
-export interface RecipientInfo {
-  /** Recipient's X25519 public key */
-  publicKey: X25519PublicKey;
-  /** Optional device/user label (e.g., "MacBook Pro", "iPhone") */
-  label?: string;
 }
 
 // ============================================================================
@@ -196,10 +164,10 @@ export interface RecipientInfo {
  * Options for uploadBatch operation.
  */
 export interface UploadOptions {
-  /** Sender's key pair for authenticated wrapping */
-  senderKeyPair: X25519KeyPair;
-  /** Recipients who can decrypt the manifest */
-  recipients: RecipientInfo[];
+  /** Caller-derived symmetric manifest key (32 bytes) */
+  manifestKey: SymmetricKey;
+  /** Caller-supplied batch id (16 bytes), used by later Vault wire-format phases */
+  batch_id: Uint8Array;
   /** Explicit directory declarations (for empty dirs or timestamp overrides) */
   directories?: DirectoryInput[];
   /**
@@ -333,14 +301,8 @@ export interface UploadProgress {
 export interface GetManifestOptions {
   /** IPFS client for content retrieval */
   ipfsClient: import("./ipfs-client.ts").IpfsClient;
-  /** Recipient's key pair for unwrapping the manifest key */
-  recipientKeyPair: X25519KeyPair;
-  /**
-   * Expected sender's public key for authenticated unwrapping.
-   * Required per spec - must match the senderPublicKey in the recipient record.
-   * Prevents swapped-sender attacks where an attacker replaces the sender key in the envelope.
-   */
-  expectedSenderPublicKey: X25519PublicKey;
+  /** Caller-derived symmetric manifest key (32 bytes) */
+  manifestKey: SymmetricKey;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
 }
@@ -496,13 +458,8 @@ export interface IpfsStorageConfig {
  * Unlike GetManifestOptions, ipfsClient is bound to the module.
  */
 export interface ReadOptions {
-  /** Recipient's key pair for unwrapping the manifest key */
-  recipientKeyPair: X25519KeyPair;
-  /**
-   * Expected sender's public key for authenticated unwrapping.
-   * Must match the senderPublicKey in the manifest envelope.
-   */
-  expectedSenderPublicKey: X25519PublicKey;
+  /** Caller-derived symmetric manifest key (32 bytes) */
+  manifestKey: SymmetricKey;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
 }
@@ -517,13 +474,13 @@ export interface IpfsStorageModule {
    *
    * Uses streaming processing for memory efficiency:
    * - Files are processed lazily from the AsyncIterable
-   * - Small files are aggregated into ~10MB chunks
-   * - Large files stream through ~10MB dedicated chunks
+   * - Small files are aggregated into ~16 MiB chunks
+   * - Large files stream through ~16 MiB dedicated chunks
    * - Sub-manifests are flushed incrementally (~1MB threshold)
-   * - Peak memory usage: ~12MB regardless of batch size
+   * - Peak memory usage: ~18 MiB regardless of batch size
    *
    * @param files - Async iterable of files to upload
-   * @param options - Upload options (sender key, recipients, etc.)
+   * @param options - Upload options (manifest key, batch id, etc.)
    * @returns Batch result with CID and manifest
    */
   uploadBatch(
@@ -534,7 +491,7 @@ export interface IpfsStorageModule {
   /**
    * Retrieve and decrypt a batch manifest from IPFS.
    * @param batchCid - Root CID of the batch
-   * @param options - Read options (recipient key pair, expected sender)
+   * @param options - Read options (manifest key, abort signal)
    * @returns Decrypted batch manifest
    */
   getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest>;

@@ -2,8 +2,9 @@ import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   createStreamingFileInput,
+  createTestBatchId,
   createTestClient,
-  createTestKeyPair,
+  createTestManifestKey,
 } from "./setup.ts";
 import { asAsyncIterable, createIpfsStorageModule } from "../src/index.ts";
 import type { BatchManifest, FileDownloadRef } from "../src/types.ts";
@@ -34,14 +35,14 @@ describe("E2E Basic Upload & Download", () => {
       Date.now(),
     );
 
-    const senderKeys = await createTestKeyPair(0);
-    const recipientKeys = await createTestKeyPair(1);
+    const manifestKey = createTestManifestKey(0);
+    const batch_id = createTestBatchId(0);
 
     // 2. Upload
     console.log("Uploading batch...");
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair: senderKeys,
-      recipients: [{ publicKey: recipientKeys.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     expect(result.cid).toBeDefined();
@@ -50,8 +51,7 @@ describe("E2E Basic Upload & Download", () => {
 
     // 3. Get Manifest
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair: recipientKeys,
-      expectedSenderPublicKey: senderKeys.publicKey,
+      manifestKey,
     });
 
     expect(manifest.files.length).toBe(1);
@@ -95,17 +95,16 @@ describe("E2E Basic Upload & Download", () => {
       await createStreamingFileInput(meContent, "/photos/me.jpg"),
     ];
 
-    const senderKeys = await createTestKeyPair(2);
-    const recipientKeys = await createTestKeyPair(3);
+    const manifestKey = createTestManifestKey(2);
+    const batch_id = createTestBatchId(2);
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
-      senderKeyPair: senderKeys,
-      recipients: [{ publicKey: recipientKeys.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair: recipientKeys,
-      expectedSenderPublicKey: senderKeys.publicKey,
+      manifestKey,
     });
 
     expect(manifest.files.length).toBe(2);

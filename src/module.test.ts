@@ -6,8 +6,6 @@ import { beforeAll, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   type ContentHash,
-  deriveEncryptionKeyPair,
-  deriveSeed,
   hashBlake2b,
   preloadSodium,
 } from "@0xd49daa/safecrypt";
@@ -16,6 +14,11 @@ import { MockIpfsClient } from "./ipfs-client.ts";
 import { ValidationError } from "./errors.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
 import type { IpfsStorageConfig, StreamingFileInput } from "./types.ts";
+
+const manifestKey = new Uint8Array(
+  32,
+) as import("@0xd49daa/safecrypt").SymmetricKey;
+const batch_id = new Uint8Array(16).fill(1);
 
 // ============================================================================
 // Test Helpers
@@ -49,16 +52,6 @@ async function createFileInput(
         },
       }),
   };
-}
-
-// Test mnemonic (12 words)
-const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-/** Create test key pair from mnemonic seed */
-async function createTestKeyPair(index = 0) {
-  const seed = await deriveSeed(TEST_MNEMONIC);
-  return deriveEncryptionKeyPair(seed, index);
 }
 
 /** Collect async iterable to Uint8Array */
@@ -166,16 +159,13 @@ describe("createIpfsStorageModule - round-trip", () => {
     const ipfsClient = new MockIpfsClient();
     const module = createIpfsStorageModule({ ipfsClient });
 
-    const senderKeyPair = await createTestKeyPair(0);
-    const recipientKeyPair = await createTestKeyPair(1);
-
     // Upload
     const content = "Hello, IPFS Storage Module!";
     const file = await createFileInput(content, "/hello.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     expect(result.cid).toMatch(/^bafybei/);
@@ -183,8 +173,7 @@ describe("createIpfsStorageModule - round-trip", () => {
 
     // Get manifest
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
+      manifestKey,
     });
 
     expect(manifest.cid).toBe(result.cid);
@@ -212,9 +201,6 @@ describe("createIpfsStorageModule - round-trip", () => {
     const ipfsClient = new MockIpfsClient();
     const module = createIpfsStorageModule({ ipfsClient });
 
-    const senderKeyPair = await createTestKeyPair(0);
-    const recipientKeyPair = await createTestKeyPair(1);
-
     // Upload multiple files
     const files = [
       await createFileInput("File A content", "/a.txt"),
@@ -223,14 +209,13 @@ describe("createIpfsStorageModule - round-trip", () => {
     ];
 
     const result = await module.uploadBatch(asAsyncIterable(files), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     // Get manifest
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
+      manifestKey,
     });
 
     expect(manifest.files).toHaveLength(3);
@@ -270,16 +255,13 @@ describe("createIpfsStorageModule - round-trip", () => {
     const ipfsClient = new MockIpfsClient();
     const module = createIpfsStorageModule({ ipfsClient });
 
-    const senderKeyPair = await createTestKeyPair(0);
-    const recipientKeyPair = await createTestKeyPair(1);
-
     const file = await createFileInput("test content", "/test.txt");
 
     // Upload with signal (not aborted)
     const controller = new AbortController();
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      manifestKey,
+      batch_id,
       signal: controller.signal,
     });
 
@@ -287,8 +269,7 @@ describe("createIpfsStorageModule - round-trip", () => {
 
     // Get manifest with signal (not aborted)
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair,
-      expectedSenderPublicKey: senderKeyPair.publicKey,
+      manifestKey,
       signal: controller.signal,
     });
 

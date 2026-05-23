@@ -55,8 +55,8 @@ function validateConfig(config: IpfsStorageConfig): void {
  * })
  *
  * const result = await module.uploadBatch(files, {
- *   senderKeyPair,
- *   recipients: [{ publicKey: recipientPublicKey }],
+ *   manifestKey,
+ *   batch_id,
  * })
  * ```
  */
@@ -81,8 +81,7 @@ export function createIpfsStorageModule(
     ): Promise<BatchManifest> {
       return getManifestImpl(batchCid, {
         ipfsClient,
-        recipientKeyPair: options.recipientKeyPair,
-        expectedSenderPublicKey: options.expectedSenderPublicKey,
+        manifestKey: options.manifestKey,
         signal: options.signal,
       });
     },

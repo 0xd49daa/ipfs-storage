@@ -6,8 +6,6 @@ import { beforeAll, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   type ContentHash,
-  deriveEncryptionKeyPair,
-  deriveSeed,
   hashBlake2b,
   preloadSodium,
   type SymmetricKey,
@@ -27,6 +25,11 @@ import { downloadFile } from "./download.ts";
 import { uploadBatch } from "./streaming-upload.ts";
 import { getManifest } from "./manifest-retrieval.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
+
+const manifestKey = new Uint8Array(
+  32,
+) as import("@0xd49daa/safecrypt").SymmetricKey;
+const batch_id = new Uint8Array(16).fill(1);
 
 // ============================================================================
 // Test Helpers
@@ -86,16 +89,6 @@ async function createBinaryFileInput(
   };
 }
 
-// Test mnemonic (12 words)
-const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-/** Create test key pair from mnemonic seed */
-async function createTestKeyPair(index = 0) {
-  const seed = await deriveSeed(TEST_MNEMONIC);
-  return deriveEncryptionKeyPair(seed, index);
-}
-
 /** Collect async iterable to Uint8Array */
 async function collectBytes(
   iterable: AsyncIterable<Uint8Array>,
@@ -120,7 +113,6 @@ async function uploadAndGetRef(
   path: string,
   ipfsClient: MockIpfsClient,
 ): Promise<{ ref: FileDownloadRef; originalContent: Uint8Array }> {
-  const keyPair = await createTestKeyPair();
   const originalContent = typeof content === "string"
     ? new TextEncoder().encode(content)
     : content;
@@ -132,16 +124,15 @@ async function uploadAndGetRef(
   const result = await uploadBatch(
     asAsyncIterable([file]),
     {
-      senderKeyPair: keyPair,
-      recipients: [{ publicKey: keyPair.publicKey }],
+      manifestKey,
+      batch_id,
     },
     ipfsClient,
   );
 
   const manifest = await getManifest(result.cid, {
     ipfsClient,
-    recipientKeyPair: keyPair,
-    expectedSenderPublicKey: keyPair.publicKey,
+    manifestKey,
   });
 
   const fileInfo = manifest.files[0]!;
@@ -642,8 +633,8 @@ describe("downloadFile - abort signal", () => {
 
   test("abort during multi-chunk download stops after current chunk", async () => {
     const ipfsClient = new MockIpfsClient();
-    // Create a file larger than 10MB to get multiple chunks
-    const largeContent = new Uint8Array(11 * 1024 * 1024);
+    // Create a file larger than 16 MiB to get multiple chunks
+    const largeContent = new Uint8Array(17 * 1024 * 1024);
     for (let i = 0; i < largeContent.length; i++) {
       largeContent[i] = i % 256;
     }
@@ -693,7 +684,6 @@ describe("downloadFile - abort signal", () => {
 describe("downloadFile - round-trip integration", () => {
   test("upload → getManifest → downloadFile returns original content", async () => {
     const ipfsClient = new MockIpfsClient();
-    const keyPair = await createTestKeyPair();
     const content = "Integration test content";
 
     // Upload
@@ -701,8 +691,8 @@ describe("downloadFile - round-trip integration", () => {
     const uploadResult = await uploadBatch(
       asAsyncIterable([file]),
       {
-        senderKeyPair: keyPair,
-        recipients: [{ publicKey: keyPair.publicKey }],
+        manifestKey,
+        batch_id,
       },
       ipfsClient,
     );
@@ -710,8 +700,7 @@ describe("downloadFile - round-trip integration", () => {
     // Get manifest
     const manifest = await getManifest(uploadResult.cid, {
       ipfsClient,
-      recipientKeyPair: keyPair,
-      expectedSenderPublicKey: keyPair.publicKey,
+      manifestKey,
     });
 
     // Download
@@ -734,7 +723,6 @@ describe("downloadFile - round-trip integration", () => {
 
   test("works with multiple files in batch", async () => {
     const ipfsClient = new MockIpfsClient();
-    const keyPair = await createTestKeyPair();
 
     const files = [
       await createFileInput("Content 1", "/file1.txt"),
@@ -745,16 +733,15 @@ describe("downloadFile - round-trip integration", () => {
     const uploadResult = await uploadBatch(
       asAsyncIterable(files),
       {
-        senderKeyPair: keyPair,
-        recipients: [{ publicKey: keyPair.publicKey }],
+        manifestKey,
+        batch_id,
       },
       ipfsClient,
     );
 
     const manifest = await getManifest(uploadResult.cid, {
       ipfsClient,
-      recipientKeyPair: keyPair,
-      expectedSenderPublicKey: keyPair.publicKey,
+      manifestKey,
     });
 
     // Download each file and verify
@@ -779,7 +766,6 @@ describe("downloadFile - round-trip integration", () => {
 
   test("handles batch with empty and non-empty files", async () => {
     const ipfsClient = new MockIpfsClient();
-    const keyPair = await createTestKeyPair();
 
     const files = [
       await createFileInput("", "/empty.txt"),
@@ -789,16 +775,15 @@ describe("downloadFile - round-trip integration", () => {
     const uploadResult = await uploadBatch(
       asAsyncIterable(files),
       {
-        senderKeyPair: keyPair,
-        recipients: [{ publicKey: keyPair.publicKey }],
+        manifestKey,
+        batch_id,
       },
       ipfsClient,
     );
 
     const manifest = await getManifest(uploadResult.cid, {
       ipfsClient,
-      recipientKeyPair: keyPair,
-      expectedSenderPublicKey: keyPair.publicKey,
+      manifestKey,
     });
 
     // Download empty file

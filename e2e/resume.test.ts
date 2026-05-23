@@ -2,8 +2,9 @@ import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   createStreamingFileInput,
+  createTestBatchId,
   createTestClient,
-  createTestKeyPair,
+  createTestManifestKey,
   HttpIpfsClient,
   IPFS_API_URL,
 } from "./setup.ts";
@@ -44,8 +45,8 @@ describe("E2E Resumable Upload", () => {
       files.push(await createStreamingFileInput(content, `/file_${i}.txt`));
     }
 
-    const senderKeys = await createTestKeyPair(20);
-    const recipientKeys = await createTestKeyPair(21);
+    const manifestKey = createTestManifestKey(20);
+    const batch_id = createTestBatchId(20);
 
     // 1. Attempt upload that fails on 2nd chunk upload (call #2)
     const faultyClient = new FaultyIpfsClient(IPFS_API_URL, 2);
@@ -54,8 +55,8 @@ describe("E2E Resumable Upload", () => {
     console.log("Starting failing upload...");
     try {
       await faultyModule.uploadBatch(asAsyncIterable(files), {
-        senderKeyPair: senderKeys,
-        recipients: [{ publicKey: recipientKeys.publicKey }],
+        manifestKey,
+        batch_id,
       });
       throw new Error("Upload should have failed!");
     } catch (err: unknown) {
@@ -71,8 +72,8 @@ describe("E2E Resumable Upload", () => {
     });
 
     const result = await healthyModule.uploadBatch(asAsyncIterable(files), {
-      senderKeyPair: senderKeys,
-      recipients: [{ publicKey: recipientKeys.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     console.log("Retry complete, CID:", result.cid);
@@ -80,8 +81,7 @@ describe("E2E Resumable Upload", () => {
     // 3. Verify
     // Manifest should contain all 15 files
     const manifest = await healthyModule.getManifest(result.cid, {
-      recipientKeyPair: recipientKeys,
-      expectedSenderPublicKey: senderKeys.publicKey,
+      manifestKey,
     });
 
     expect(manifest.files.length).toBe(15);

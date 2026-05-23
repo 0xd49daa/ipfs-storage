@@ -2,8 +2,9 @@ import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   createStreamingFileInput,
+  createTestBatchId,
   createTestClient,
-  createTestKeyPair,
+  createTestManifestKey,
 } from "./setup.ts";
 import { asAsyncIterable, createIpfsStorageModule } from "../src/index.ts";
 import type { BatchManifest, FileDownloadRef } from "../src/types.ts";
@@ -34,26 +35,25 @@ const randomBytes = (size: number) => {
 };
 
 describe("E2E Large File Upload", () => {
-  // Test file larger than 10MB chunk threshold
-  test("upload and download a 12MB file (chunked)", async () => {
-    const size = 12 * 1024 * 1024; // 12MB
+  // Test file larger than the 16 MiB chunk threshold
+  test("upload and download a 17 MiB file (chunked)", async () => {
+    const size = 17 * 1024 * 1024;
     const content = randomBytes(size); // Random content
 
     const file = await createStreamingFileInput(content, "/large.bin");
 
-    const senderKeys = await createTestKeyPair(10);
-    const recipientKeys = await createTestKeyPair(11);
+    const manifestKey = createTestManifestKey(10);
+    const batch_id = createTestBatchId(10);
 
     console.log(`Uploading ${size} bytes...`);
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair: senderKeys,
-      recipients: [{ publicKey: recipientKeys.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     console.log("Upload complete, checking manifest...");
     const manifest = await module.getManifest(result.cid, {
-      recipientKeyPair: recipientKeys,
-      expectedSenderPublicKey: senderKeys.publicKey,
+      manifestKey,
     });
 
     expect(manifest.files[0]!.chunks.length).toBeGreaterThan(1); // Should be split

@@ -9,11 +9,8 @@ import { beforeAll, beforeEach, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   type ContentHash,
-  deriveEncryptionKeyPair,
-  deriveSeed,
   hashBlake2b,
   preloadSodium,
-  type X25519KeyPair,
 } from "@0xd49daa/safecrypt";
 import {
   asAsyncIterable,
@@ -24,17 +21,14 @@ import {
   type StreamingFileInput,
 } from "./index.ts";
 
+const manifestKey = new Uint8Array(
+  32,
+) as import("@0xd49daa/safecrypt").SymmetricKey;
+const batch_id = new Uint8Array(16).fill(1);
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
-
-const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-async function createTestKeyPair(index: number): Promise<X25519KeyPair> {
-  const seed = await deriveSeed(TEST_MNEMONIC);
-  return deriveEncryptionKeyPair(seed, index);
-}
 
 async function createFileInput(
   content: string,
@@ -62,13 +56,9 @@ async function createFileInput(
 describe("Upload Retry Mechanism", () => {
   let ipfsClient: MockIpfsClient;
   let module: IpfsStorageModule;
-  let senderKeyPair: X25519KeyPair;
-  let recipientKeyPair: X25519KeyPair;
 
   beforeAll(async () => {
     await preloadSodium();
-    senderKeyPair = await createTestKeyPair(0);
-    recipientKeyPair = await createTestKeyPair(1);
   });
 
   beforeEach(() => {
@@ -83,8 +73,8 @@ describe("Upload Retry Mechanism", () => {
     const file = await createFileInput("Hello, World!", "/test.txt");
 
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      manifestKey,
+      batch_id,
     });
 
     expect(result.cid).toBeDefined();
@@ -99,8 +89,8 @@ describe("Upload Retry Mechanism", () => {
 
     await expect(
       module.uploadBatch(asAsyncIterable([file]), {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
+        manifestKey,
+        batch_id,
         uploadRetries: 3,
       }),
     ).rejects.toBeInstanceOf(ChunkUploadError);
@@ -114,8 +104,8 @@ describe("Upload Retry Mechanism", () => {
 
     // With 5 retries, it should succeed (4 failures + 1 success)
     const result = await module.uploadBatch(asAsyncIterable([file]), {
-      senderKeyPair,
-      recipients: [{ publicKey: recipientKeyPair.publicKey }],
+      manifestKey,
+      batch_id,
       uploadRetries: 5,
     });
 
@@ -131,8 +121,8 @@ describe("Upload Retry Mechanism", () => {
     // With uploadRetries=1, only one attempt is made, so it should fail
     await expect(
       module.uploadBatch(asAsyncIterable([file]), {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
+        manifestKey,
+        batch_id,
         uploadRetries: 1,
       }),
     ).rejects.toBeInstanceOf(ChunkUploadError);
@@ -154,8 +144,8 @@ describe("Upload Retry Mechanism", () => {
 
     try {
       await module.uploadBatch(asAsyncIterable([file]), {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
+        manifestKey,
+        batch_id,
         signal: controller.signal,
       });
       throw new Error("Should have thrown");
@@ -178,8 +168,8 @@ describe("Upload Retry Mechanism", () => {
 
     try {
       await module.uploadBatch(asAsyncIterable([file]), {
-        senderKeyPair,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
+        manifestKey,
+        batch_id,
         uploadRetries: 2,
       });
       throw new Error("Should have thrown");

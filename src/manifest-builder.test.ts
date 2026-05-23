@@ -6,36 +6,22 @@ import {
   encryptManifest,
   sortFilesByPath,
 } from "./manifest-builder.ts";
-import {
-  decodeManifestEnvelope,
-  decodeRootManifest,
-  decodeSubManifest,
-} from "./serialization.ts";
+import { decodeRootManifest, decodeSubManifest } from "./serialization.ts";
 import { ChunkEncryption } from "./types.ts";
 import type { DirectoryInfo, FileInfo } from "./types.ts";
-import { MANIFEST_DOMAIN, SUB_MANIFEST_SIZE } from "./constants.ts";
+import { SUB_MANIFEST_SIZE } from "./constants.ts";
 import { ValidationError } from "./errors.ts";
+import { decryptVaultManifestRecord } from "./vault-aead.ts";
 import {
   asContentHash,
-  decrypt,
-  deriveEncryptionKeyPair,
-  deriveSeed,
   generateKey,
   hashBlake2b,
   preloadSodium,
   randomBytes,
-  unwrapKeyAuthenticated,
 } from "@0xd49daa/safecrypt";
-import type { ContentHash, Nonce, SymmetricKey } from "@0xd49daa/safecrypt";
+import type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
 
-const TEST_MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-// Helper to create test key pairs
-async function createTestKeyPair(index: number) {
-  const seed = await deriveSeed(TEST_MNEMONIC);
-  return deriveEncryptionKeyPair(seed, index);
-}
+const batchId = new Uint8Array(16).fill(7);
 
 // Helper to create a content hash
 async function mockContentHash(): Promise<ContentHash> {
@@ -82,16 +68,23 @@ function makeDirectoryInfo(path: string): DirectoryInfo {
   };
 }
 
-// Helper to decrypt manifest bytes (nonce + ciphertext combined)
+function rootRecordFromBlob(blob: Uint8Array): Uint8Array {
+  expect(blob.slice(0, batchId.length)).toEqual(batchId);
+  return blob.slice(batchId.length);
+}
+
+// Helper to decrypt Vault manifest AEAD records.
 async function decryptManifestBytes(
-  combined: Uint8Array,
+  record: Uint8Array,
   key: SymmetricKey,
-  context: string,
+  manifestNodeId: number,
 ): Promise<Uint8Array> {
-  const nonce = combined.slice(0, 24) as Nonce;
-  const ciphertext = combined.slice(24);
-  const contextBytes = new TextEncoder().encode(context);
-  return decrypt(ciphertext, nonce, key, contextBytes);
+  return decryptVaultManifestRecord({
+    record,
+    manifestKey: key,
+    batchId,
+    manifestNodeId,
+  });
 }
 
 describe("Phase 9: Manifest Construction & Encryption", () => {
@@ -468,9 +461,7 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
   describe("encryptManifest()", () => {
     test("round-trip: encrypt then decrypt", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
-
+      const manifestKey = await generateKey();
       const files = [await makeFileInfo("/test.txt")];
       const manifest = buildManifest({
         files,
@@ -480,131 +471,24 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
       const result = await encryptManifest({
         manifest,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
+        manifestKey,
+        batchId,
       });
 
-      // Decrypt using recipient key
-      const envelope = decodeManifestEnvelope(result.envelope);
-      const wrapped = envelope.recipients[0]!;
-      const unwrappedKey = await unwrapKeyAuthenticated(
-        {
-          nonce: wrapped.nonce,
-          ciphertext: wrapped.ciphertext,
-          senderPublicKey: wrapped.senderPublicKey,
-        },
-        senderKeyPair.publicKey,
-        recipientKeyPair,
-      );
-
-      // Decrypt manifest
       const decrypted = await decryptManifestBytes(
-        envelope.encryptedManifest,
-        unwrappedKey,
-        MANIFEST_DOMAIN.ROOT,
+        rootRecordFromBlob(result.envelope),
+        manifestKey,
+        0,
       );
 
       const decoded = decodeRootManifest(decrypted);
+      expect(result.manifestKey).toEqual(manifestKey);
       expect(decoded.files).toHaveLength(1);
       expect(decoded.files[0]!.path).toBe("/test.txt");
     });
 
-    test("multiple recipients can all unwrap key", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipients = await Promise.all([
-        createTestKeyPair(1),
-        createTestKeyPair(2),
-        createTestKeyPair(3),
-      ]);
-
-      const manifest = buildManifest({
-        files: [await makeFileInfo("/test.txt")],
-        directories: [],
-        created: 1700000000000,
-      });
-
-      const result = await encryptManifest({
-        manifest,
-        recipients: recipients.map((kp, i) => ({
-          publicKey: kp.publicKey,
-          label: `Device ${i}`,
-        })),
-        senderKeyPair,
-      });
-
-      const envelope = decodeManifestEnvelope(result.envelope);
-      expect(envelope.recipients).toHaveLength(3);
-
-      // Each recipient should be able to unwrap
-      for (let i = 0; i < recipients.length; i++) {
-        const wrapped = envelope.recipients[i]!;
-        const key = await unwrapKeyAuthenticated(
-          {
-            nonce: wrapped.nonce,
-            ciphertext: wrapped.ciphertext,
-            senderPublicKey: wrapped.senderPublicKey,
-          },
-          senderKeyPair.publicKey,
-          recipients[i]!,
-        );
-        // All recipients should get the same manifest key
-        expect(key).toEqual(result.manifestKey);
-      }
-    });
-
-    test("labels preserved in recipient records", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
-
-      const manifest = buildManifest({
-        files: [await makeFileInfo("/test.txt")],
-        directories: [],
-        created: 1700000000000,
-      });
-
-      const result = await encryptManifest({
-        manifest,
-        recipients: [
-          {
-            publicKey: recipientKeyPair.publicKey,
-            label: "MacBook Pro",
-          },
-        ],
-        senderKeyPair,
-      });
-
-      const envelope = decodeManifestEnvelope(result.envelope);
-      expect(envelope.recipients[0]!.label).toBe("MacBook Pro");
-    });
-
-    test("throws ValidationError for empty recipients", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const manifest = buildManifest({
-        files: [],
-        directories: [],
-        created: 1700000000000,
-      });
-
-      await expect(
-        encryptManifest({
-          manifest,
-          recipients: [],
-          senderKeyPair,
-        }),
-      ).rejects.toThrow(ValidationError);
-
-      await expect(
-        encryptManifest({
-          manifest,
-          recipients: [],
-          senderKeyPair,
-        }),
-      ).rejects.toThrow("At least one recipient is required");
-    });
-
-    test("sub-manifests encrypted with different domain context", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
+    test("sub-manifests encrypted with sequential manifest node ids", async () => {
+      const manifestKey = await generateKey();
 
       // Create large manifest that splits
       const files: FileInfo[] = [];
@@ -621,29 +505,28 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
       const result = await encryptManifest({
         manifest,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
+        manifestKey,
+        batchId,
       });
 
       expect(result.encryptedSubManifests.length).toBeGreaterThan(0);
 
-      // Each sub-manifest should decrypt correctly with SUB context
-      for (const encryptedSub of result.encryptedSubManifests) {
+      // Each sub-manifest should decrypt correctly with manifest_node_id >= 1
+      for (let i = 0; i < result.encryptedSubManifests.length; i++) {
         const decrypted = await decryptManifestBytes(
-          encryptedSub,
+          result.encryptedSubManifests[i]!,
           result.manifestKey,
-          MANIFEST_DOMAIN.SUB,
+          i + 1,
         );
         const decoded = decodeSubManifest(decrypted);
         expect(decoded.files.length).toBeGreaterThan(0);
       }
 
-      // Verify root manifest decrypts with ROOT context
-      const envelope = decodeManifestEnvelope(result.envelope);
+      // Verify root manifest decrypts with manifest_node_id = 0
       const rootDecrypted = await decryptManifestBytes(
-        envelope.encryptedManifest,
+        rootRecordFromBlob(result.envelope),
         result.manifestKey,
-        MANIFEST_DOMAIN.ROOT,
+        0,
       );
       const root = decodeRootManifest(rootDecrypted);
       expect(root.subManifests.length).toBe(
@@ -651,9 +534,7 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
       );
     });
 
-    test("uses provided manifest key when given", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
+    test("uses provided manifest key", async () => {
       const providedKey = await generateKey();
 
       const manifest = buildManifest({
@@ -664,51 +545,26 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
       const result = await encryptManifest({
         manifest,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
         manifestKey: providedKey,
+        batchId,
       });
 
       expect(result.manifestKey).toEqual(providedKey);
 
       // Verify we can decrypt with the provided key
-      const envelope = decodeManifestEnvelope(result.envelope);
       const decrypted = await decryptManifestBytes(
-        envelope.encryptedManifest,
+        rootRecordFromBlob(result.envelope),
         providedKey,
-        MANIFEST_DOMAIN.ROOT,
+        0,
       );
       const decoded = decodeRootManifest(decrypted);
       expect(decoded.files).toHaveLength(1);
-    });
-
-    test("recipients without labels work correctly", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
-
-      const manifest = buildManifest({
-        files: [await makeFileInfo("/test.txt")],
-        directories: [],
-        created: 1700000000000,
-      });
-
-      const result = await encryptManifest({
-        manifest,
-        recipients: [
-          { publicKey: recipientKeyPair.publicKey }, // No label
-        ],
-        senderKeyPair,
-      });
-
-      const envelope = decodeManifestEnvelope(result.envelope);
-      expect(envelope.recipients[0]!.label).toBeUndefined();
     });
   });
 
   describe("buildAndEncryptManifest()", () => {
     test("combines build and encrypt", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
+      const manifestKey = await generateKey();
 
       const files = [
         await makeFileInfo("/photos/img1.jpg"),
@@ -725,26 +581,15 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
         files,
         directories,
         created: 1700000000000,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
+        manifestKey,
+        batchId,
       });
 
       // Decrypt and verify
-      const envelope = decodeManifestEnvelope(result.envelope);
-      const unwrappedKey = await unwrapKeyAuthenticated(
-        {
-          nonce: envelope.recipients[0]!.nonce,
-          ciphertext: envelope.recipients[0]!.ciphertext,
-          senderPublicKey: envelope.recipients[0]!.senderPublicKey,
-        },
-        senderKeyPair.publicKey,
-        recipientKeyPair,
-      );
-
       const decrypted = await decryptManifestBytes(
-        envelope.encryptedManifest,
-        unwrappedKey,
-        MANIFEST_DOMAIN.ROOT,
+        rootRecordFromBlob(result.envelope),
+        manifestKey,
+        0,
       );
 
       const decoded = decodeRootManifest(decrypted);
@@ -763,8 +608,7 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
     });
 
     test("passes options to buildManifest", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
+      const manifestKey = await generateKey();
 
       const files: FileInfo[] = [];
       for (let i = 0; i < 50; i++) {
@@ -775,8 +619,8 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
         files,
         directories: [],
         created: 1700000000000,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
+        manifestKey,
+        batchId,
         options: { maxSubManifestSize: 2 * 1024 }, // Force splitting
       });
 
@@ -787,8 +631,7 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
   describe("integration: large manifest with splitting round-trips correctly", () => {
     test("full round-trip with sub-manifests", async () => {
-      const senderKeyPair = await createTestKeyPair(0);
-      const recipientKeyPair = await createTestKeyPair(1);
+      const manifestKey = await generateKey();
 
       // Create many files to force splitting
       const files: FileInfo[] = [];
@@ -808,8 +651,8 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
         files,
         directories,
         created: 1700000000000,
-        recipients: [{ publicKey: recipientKeyPair.publicKey }],
-        senderKeyPair,
+        manifestKey,
+        batchId,
         options: { maxSubManifestSize: 3 * 1024 },
       });
 
@@ -817,21 +660,10 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
       expect(result.encryptedSubManifests.length).toBeGreaterThan(0);
 
       // Decrypt root manifest
-      const envelope = decodeManifestEnvelope(result.envelope);
-      const key = await unwrapKeyAuthenticated(
-        {
-          nonce: envelope.recipients[0]!.nonce,
-          ciphertext: envelope.recipients[0]!.ciphertext,
-          senderPublicKey: envelope.recipients[0]!.senderPublicKey,
-        },
-        senderKeyPair.publicKey,
-        recipientKeyPair,
-      );
-
       const rootDecrypted = await decryptManifestBytes(
-        envelope.encryptedManifest,
-        key,
-        MANIFEST_DOMAIN.ROOT,
+        rootRecordFromBlob(result.envelope),
+        manifestKey,
+        0,
       );
       const root = decodeRootManifest(rootDecrypted);
 
@@ -844,11 +676,11 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
 
       // Decrypt all sub-manifests and count files
       let totalFiles = 0;
-      for (const encSub of result.encryptedSubManifests) {
+      for (let i = 0; i < result.encryptedSubManifests.length; i++) {
         const decSub = await decryptManifestBytes(
-          encSub,
-          key,
-          MANIFEST_DOMAIN.SUB,
+          result.encryptedSubManifests[i]!,
+          manifestKey,
+          i + 1,
         );
         const sub = decodeSubManifest(decSub);
         totalFiles += sub.files.length;

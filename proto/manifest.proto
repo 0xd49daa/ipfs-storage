@@ -2,26 +2,10 @@ syntax = "proto3";
 
 package filemanager.ipfsstorage.v1;
 
-// Encrypted manifest with recipient key wrapping
+// Encrypted root manifest envelope
 message ManifestEnvelope {
   // Encrypted RootManifest bytes
   bytes encrypted_manifest = 1;
-  // One wrapped key per recipient device/user
-  repeated RecipientKey recipients = 2;
-}
-
-// Wrapped symmetric key for a single recipient
-message RecipientKey {
-  // Recipient's X25519 public key (32 bytes)
-  bytes recipient_public_key = 1;
-  // Nonce used for crypto_box (24 bytes)
-  bytes nonce = 2;
-  // Encrypted manifest key (48 bytes: 32 key + 16 auth tag)
-  bytes ciphertext = 3;
-  // Sender's X25519 public key (32 bytes)
-  bytes sender_public_key = 4;
-  // Optional device/user label (e.g., "MacBook Pro", "iPhone")
-  string label = 5;
 }
 
 // Root manifest containing directory structure and file index
@@ -34,6 +18,8 @@ message RootManifest {
   repeated SubManifestIndex sub_manifests = 3;
   // Batch creation timestamp (Unix ms)
   uint64 created = 4;
+  // Manifest schema version
+  uint32 manifest_version = 5;
 }
 
 // Index entry for a sub-manifest (for batches with many files)
@@ -98,7 +84,7 @@ message FileChunk {
 
 // Chunk encryption method
 enum ChunkEncryption {
-  // Default: single-shot encryption for chunks <= 10MB
+  // Default: single-shot encryption for chunks <= 16 MiB
   CHUNK_ENCRYPTION_SINGLE_SHOT = 0;
   // Streaming encryption for larger chunks
   CHUNK_ENCRYPTION_STREAMING = 1;

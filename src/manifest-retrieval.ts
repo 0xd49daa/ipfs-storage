@@ -4,30 +4,18 @@
  * Implements getManifest() for fetching and decrypting batch manifests from IPFS.
  */
 
-import {
-  constantTimeEqual,
-  decrypt,
-  type Nonce,
-  type SymmetricKey,
-  unwrapKeyAuthenticated,
-  type X25519PublicKey,
-} from "@0xd49daa/safecrypt";
+import { decrypt, type Nonce, type SymmetricKey } from "@0xd49daa/safecrypt";
 
 import { MANIFEST_DOMAIN, NONCE_SIZE } from "./constants.ts";
 import { ManifestError, ValidationError } from "./errors.ts";
+import { VAULT_AES_256_KEY_SIZE } from "./vault-aead.ts";
 import {
   decodeManifestEnvelope,
   decodeRootManifest,
   decodeSubManifest,
 } from "./serialization.ts";
 import type { IpfsClient } from "./ipfs-client.ts";
-import type {
-  BatchManifest,
-  FileInfo,
-  GetManifestOptions,
-  RecipientKeyInfo,
-  SubManifestIndexEntry,
-} from "./types.ts";
+import type { BatchManifest, FileInfo, GetManifestOptions } from "./types.ts";
 
 /**
  * Check if abort signal is triggered and throw AbortError if so.
@@ -68,28 +56,6 @@ async function collectBytes(
     offset += chunk.length;
   }
   return result;
-}
-
-/**
- * Find the recipient record matching the given public key.
- * Uses constant-time comparison to prevent timing attacks.
- *
- * @returns The matching RecipientKeyInfo or null if not found
- */
-async function findMatchingRecipient(
-  recipients: RecipientKeyInfo[],
-  recipientPublicKey: X25519PublicKey,
-): Promise<RecipientKeyInfo | null> {
-  for (const recipient of recipients) {
-    const isMatch = await constantTimeEqual(
-      recipient.recipientPublicKey,
-      recipientPublicKey,
-    );
-    if (isMatch) {
-      return recipient;
-    }
-  }
-  return null;
 }
 
 /**
@@ -230,12 +196,22 @@ export async function getManifest(
   batchCid: string,
   options: GetManifestOptions,
 ): Promise<BatchManifest> {
-  const { ipfsClient, recipientKeyPair, expectedSenderPublicKey, signal } =
-    options;
+  if (!options || typeof options !== "object") {
+    throw new ValidationError("options must be an object");
+  }
+  const { ipfsClient, manifestKey, signal } = options;
 
   // 1. Validate inputs
   if (!batchCid || typeof batchCid !== "string" || batchCid.trim() === "") {
     throw new ValidationError("batchCid must be a non-empty string");
+  }
+  if (!manifestKey) {
+    throw new ValidationError("manifestKey is required");
+  }
+  if (manifestKey.length !== VAULT_AES_256_KEY_SIZE) {
+    throw new ValidationError(
+      `manifestKey must be ${VAULT_AES_256_KEY_SIZE} bytes, got ${manifestKey.length}`,
+    );
   }
 
   // 2. Check abort signal
@@ -273,52 +249,7 @@ export async function getManifest(
     );
   }
 
-  // 5. Find matching recipient
-  const matchingRecipient = await findMatchingRecipient(
-    envelope.recipients,
-    recipientKeyPair.publicKey,
-  );
-  if (!matchingRecipient) {
-    throw new ManifestError(
-      batchCid,
-      "No matching recipient found for provided key",
-    );
-  }
-
-  // 6. Verify sender key matches expected
-  const senderMatches = await constantTimeEqual(
-    matchingRecipient.senderPublicKey,
-    expectedSenderPublicKey,
-  );
-  if (!senderMatches) {
-    throw new ManifestError(batchCid, "Sender public key mismatch");
-  }
-
-  // 7. Unwrap manifest key
-  let manifestKey: SymmetricKey;
-  try {
-    manifestKey = await unwrapKeyAuthenticated(
-      {
-        nonce: matchingRecipient.nonce,
-        ciphertext: matchingRecipient.ciphertext,
-        senderPublicKey: matchingRecipient.senderPublicKey,
-      },
-      expectedSenderPublicKey,
-      recipientKeyPair,
-    );
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw error;
-    }
-    throw new ManifestError(
-      batchCid,
-      `Failed to unwrap manifest key: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-
-  // 8. Decrypt root manifest
+  // 5. Decrypt root manifest
   const decryptedRootBytes = await decryptManifestBytes(
     envelope.encryptedManifest,
     manifestKey,
@@ -326,7 +257,7 @@ export async function getManifest(
     batchCid,
   );
 
-  // 9. Parse root manifest
+  // 6. Parse root manifest
   let rootManifest;
   try {
     rootManifest = decodeRootManifest(decryptedRootBytes);
@@ -342,10 +273,10 @@ export async function getManifest(
     );
   }
 
-  // 10. Check abort signal
+  // 7. Check abort signal
   checkAbort(signal);
 
-  // 11. Fetch sub-manifests (if any)
+  // 8. Fetch sub-manifests (if any)
   const allFiles: FileInfo[] = [...rootManifest.files];
 
   for (const subManifestEntry of rootManifest.subManifests) {
@@ -359,11 +290,11 @@ export async function getManifest(
     allFiles.push(...subManifestFiles);
   }
 
-  // 12-13. Build and return BatchManifest
+  // 9. Build and return BatchManifest
   return {
     cid: batchCid,
+    manifestVersion: rootManifest.manifestVersion,
     manifestKey,
-    senderPublicKey: expectedSenderPublicKey,
     directories: rootManifest.directories,
     files: allFiles,
     created: rootManifest.created,

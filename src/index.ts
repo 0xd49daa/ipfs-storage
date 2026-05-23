@@ -38,7 +38,6 @@ export type {
   ChunkUploadedCallback,
   ChunkUploadedInfo,
   DirectoryInput,
-  RecipientInfo,
   RenamedFile,
   StreamingFileInput,
   SubManifestFlushedCallback,
@@ -72,6 +71,7 @@ export type {
 } from "./types.ts";
 
 export { ChunkEncryption } from "./types.ts";
+export { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
 
 // =============================================================================
 // Download Types
@@ -107,10 +107,4 @@ export {
 // Re-exported Encryption Types (for convenience)
 // =============================================================================
 
-export type {
-  ContentHash,
-  SymmetricKey,
-  X25519KeyPair,
-  X25519PrivateKey,
-  X25519PublicKey,
-} from "@0xd49daa/safecrypt";
+export type { ContentHash, SymmetricKey } from "@0xd49daa/safecrypt";
