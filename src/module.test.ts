@@ -187,11 +187,12 @@ describe("createIpfsStorageModule - round-trip", () => {
       path: fileInfo.path,
       size: fileInfo.size,
       contentHash: fileInfo.contentHash,
-      manifestKey: manifest.manifestKey,
       chunks: fileInfo.chunks,
     };
 
-    const downloadedBytes = await collectBytes(module.downloadFile(fileRef));
+    const downloadedBytes = await collectBytes(
+      module.downloadFile(fileRef, { manifestKey }),
+    );
     const downloadedContent = new TextDecoder().decode(downloadedBytes);
 
     expect(downloadedContent).toBe(content);
@@ -226,12 +227,13 @@ describe("createIpfsStorageModule - round-trip", () => {
       path: f.path,
       size: f.size,
       contentHash: f.contentHash,
-      manifestKey: manifest.manifestKey,
       chunks: f.chunks,
     }));
 
     const downloadedFiles: Array<{ path: string; content: string }> = [];
-    for await (const downloaded of module.downloadFiles(fileRefs)) {
+    for await (
+      const downloaded of module.downloadFiles(fileRefs, { manifestKey })
+    ) {
       const bytes = await collectBytes(downloaded.content);
       downloadedFiles.push({
         path: downloaded.path,

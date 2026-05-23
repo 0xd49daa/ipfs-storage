@@ -1,6 +1,11 @@
 # API Reference
 
-Complete API documentation for `@0xd49daa/ipfs-storage`.
+Complete API documentation for `@0xd49daa/ipfs-storage` `0.2.0`.
+
+The package is symmetric-only. It does not expose recipient lists, sender key
+pairs, X25519 keys, or key wrapping APIs. Callers provide `manifestKey` for
+upload, manifest retrieval, and download. Upload also requires a 16-byte
+`batch_id`.
 
 ## Table of Contents
 
@@ -8,9 +13,11 @@ Complete API documentation for `@0xd49daa/ipfs-storage`.
 - [Upload API](#upload-api)
 - [Manifest API](#manifest-api)
 - [Download API](#download-api)
+- [Wire Format](#wire-format)
 - [Error Classes](#error-classes)
 - [Types Reference](#types-reference)
 - [Re-exported Types](#re-exported-types)
+- [IpfsClient Interface](#ipfsclient-interface)
 
 ---
 
@@ -18,48 +25,39 @@ Complete API documentation for `@0xd49daa/ipfs-storage`.
 
 ### createIpfsStorageModule(config)
 
-Creates an IPFS storage module instance with bound configuration.
+Creates an IPFS storage module instance with a bound IPFS client.
 
 ```typescript
 function createIpfsStorageModule(config: IpfsStorageConfig): IpfsStorageModule;
 ```
 
-**Parameters:**
+Parameters:
 
-| Name     | Type                | Description          |
-| -------- | ------------------- | -------------------- |
+| Name | Type | Description |
+| --- | --- | --- |
 | `config` | `IpfsStorageConfig` | Module configuration |
 
-**Returns:** `IpfsStorageModule` — Module instance with bound methods
+Returns: `IpfsStorageModule`.
 
-**Throws:** `ValidationError` if config is invalid
-
-**Example:**
+Throws: `ValidationError` if `config` is invalid.
 
 ```typescript
-import {
-  createIpfsStorageModule,
-  MockIpfsClient,
-} from "@0xd49daa/ipfs-storage";
+import { createIpfsStorageModule, MockIpfsClient } from "@0xd49daa/ipfs-storage";
 
-const module = createIpfsStorageModule({
+const storage = createIpfsStorageModule({
   ipfsClient: new MockIpfsClient(),
 });
 ```
 
 ### IpfsStorageConfig
 
-Configuration for creating a module instance.
-
 ```typescript
 interface IpfsStorageConfig {
-  ipfsClient: IpfsClient; // Required: IPFS client for upload/download
+  ipfsClient: IpfsClient;
 }
 ```
 
 ### IpfsStorageModule
-
-Module interface with bound IPFS client.
 
 ```typescript
 interface IpfsStorageModule {
@@ -67,14 +65,22 @@ interface IpfsStorageModule {
     files: AsyncIterable<StreamingFileInput>,
     options: UploadOptions,
   ): Promise<BatchResult>;
+
   getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest>;
+
   downloadFile(
     file: FileDownloadRef,
-    options?: DownloadOptions,
+    options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  ): Promise<void>;
+
+  downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
   ): AsyncIterable<Uint8Array>;
+
   downloadFiles(
     files: FileDownloadRef[],
-    options?: DownloadFilesOptions,
+    options: DownloadFilesOptions,
   ): AsyncIterable<DownloadedFile>;
 }
 ```
@@ -85,128 +91,135 @@ interface IpfsStorageModule {
 
 ### uploadBatch(files, options)
 
-Upload a batch of files to IPFS with encryption.
+Uploads a batch of files to IPFS with Vault-compatible symmetric encryption.
 
 ```typescript
-uploadBatch(files: AsyncIterable<StreamingFileInput>, options: UploadOptions): Promise<BatchResult>
+function uploadBatch(
+  files: AsyncIterable<StreamingFileInput>,
+  options: UploadOptions,
+  ipfsClient: IpfsClient,
+): Promise<BatchResult>;
 ```
 
-**Parameters:**
+Most consumers call `module.uploadBatch(files, options)` so `ipfsClient` is bound
+by `createIpfsStorageModule()`.
 
-| Name      | Type                                | Description                 |
-| --------- | ----------------------------------- | --------------------------- |
-| `files`   | `AsyncIterable<StreamingFileInput>` | Files to upload (non-empty) |
-| `options` | `UploadOptions`                     | Upload configuration        |
+Parameters:
 
-**Returns:** `Promise<BatchResult>` — Upload result with CID and manifest
+| Name | Type | Description |
+| --- | --- | --- |
+| `files` | `AsyncIterable<StreamingFileInput>` | Files to upload |
+| `options` | `UploadOptions` | Upload configuration |
 
-**Throws:**
+Returns: `Promise<BatchResult>`.
 
-- `ValidationError` — Empty batch, invalid paths, no recipients
+Throws: `ValidationError` for invalid options, empty input, invalid paths, or
+invalid file metadata.
 
 ### StreamingFileInput
 
-Input for a file to be uploaded. Uses a lazy `getStream()` callback for memory
-efficiency.
+Input for a file to upload. `getStream()` must return a fresh stream each time
+it is called because retries may re-read a file.
 
 ```typescript
 interface StreamingFileInput {
-  path: string; // Full path in batch (e.g., "/photos/2024/img.jpg")
-  contentHash: ContentHash; // BLAKE2b content hash computed by caller
-  size: number; // File size in bytes (required for chunk planning)
-  created?: number; // Creation timestamp (Unix ms), defaults to Date.now()
-  getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>; // Returns fresh stream
+  path: string;
+  contentHash: ContentHash;
+  size: number;
+  created?: number;
+  getStream: () => ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>;
 }
 ```
 
+Fields:
+
+| Field | Description |
+| --- | --- |
+| `path` | Full path in the batch, such as `/photos/2024/img.jpg` |
+| `contentHash` | Caller-computed 32-byte BLAKE2b content hash |
+| `size` | Plaintext file size in bytes |
+| `created` | Optional Unix timestamp in milliseconds; defaults to upload time |
+| `getStream` | Returns file content as a browser `ReadableStream` or `AsyncIterable` |
+
 ### DirectoryInput
 
-Input for explicit directory declaration.
+Explicit directory declaration. Use this for empty directories or timestamp
+overrides for inferred directories.
 
 ```typescript
 interface DirectoryInput {
-  path: string; // Full path in batch (e.g., "/photos/2024")
-  created?: number; // Creation timestamp (Unix ms)
+  path: string;
+  created?: number;
 }
 ```
 
 ### UploadOptions
 
-Options for upload operation.
-
 ```typescript
 interface UploadOptions {
-  senderKeyPair: X25519KeyPair; // Sender's key pair for authenticated wrapping
-  recipients: RecipientInfo[]; // Recipients who can decrypt (non-empty)
-  directories?: DirectoryInput[]; // Explicit directory declarations
-  signal?: AbortSignal; // Cancellation signal
-  onProgress?: UploadProgressCallback; // Progress callback
-  onChunkUploaded?: ChunkUploadedCallback; // Chunk upload completion callback
-  onSubManifestFlushed?: SubManifestFlushedCallback; // Sub-manifest flush callback
+  manifestKey: SymmetricKey;
+  batch_id: Uint8Array;
+  directories?: DirectoryInput[];
+  signal?: AbortSignal;
+  uploadRetries?: number;
+  onProgress?: UploadProgressCallback;
+  onChunkUploaded?: ChunkUploadedCallback;
+  onSubManifestFlushed?: SubManifestFlushedCallback;
 }
 ```
 
-**Abort Behavior:**
+Fields:
 
-- Throws `DOMException` with name `'AbortError'`
-- Current chunk always completes before abort takes effect
+| Field | Description |
+| --- | --- |
+| `manifestKey` | Required 32-byte caller-derived symmetric key |
+| `batch_id` | Required 16-byte caller-supplied batch id, usually random per batch |
+| `directories` | Optional explicit directory declarations |
+| `signal` | Optional cancellation signal |
+| `uploadRetries` | Retry attempts per chunk upload; default `3` |
+| `onProgress` | Upload progress callback |
+| `onChunkUploaded` | Called after a chunk upload completes |
+| `onSubManifestFlushed` | Called after an incremental sub-manifest upload completes |
 
-**Memory Management:**
+Abort behavior:
 
-The upload process uses streaming throughout to minimize memory usage:
-
-- **Large files (≥10MB):** Streamed in 10MB chunks, encrypted and uploaded
-  incrementally
-- **Small files (<10MB):** Aggregated into shared chunks using deferred stream
-  consumption
-  - Stream factories are stored during accumulation (not file data)
-  - Streams are only consumed at flush time when the aggregation buffer reaches
-    10MB
-  - Peak memory: ~10MB (one chunk) rather than sum of all pending file sizes
-
-This ensures bounded memory usage regardless of how many small files are being
-uploaded.
-
-### RecipientInfo
-
-Recipient information for upload.
-
-```typescript
-interface RecipientInfo {
-  publicKey: X25519PublicKey; // Recipient's X25519 public key
-  label?: string; // Optional device/user label (e.g., "MacBook Pro")
-}
-```
+- Throws a `DOMException` with name `AbortError`.
+- A current chunk upload may complete before the abort takes effect.
 
 ### BatchResult
 
-Result of successful upload.
-
 ```typescript
 interface BatchResult {
-  cid: string; // Root CID of uploaded batch
-  manifest: BatchManifest; // Decrypted manifest (for caller storage)
-  totalSize: number; // Total encrypted bytes uploaded
-  chunkCount: number; // Number of chunks in batch
-  manifestCount: number; // Number of manifests (1 root + N sub-manifests)
-  renamed?: RenamedFile[]; // Files renamed due to conflicts
+  cid: string;
+  manifest: BatchManifest;
+  totalSize: number;
+  chunkCount: number;
+  manifestCount: number;
+  renamed?: RenamedFile[];
+}
+```
+
+### RenamedFile
+
+```typescript
+interface RenamedFile {
+  originalPath: string;
+  newPath: string;
 }
 ```
 
 ### UploadProgress
 
-Progress information during upload.
-
 ```typescript
 interface UploadProgress {
   phase: "processing" | "finalizing";
-  filesProcessed: number; // Files processed so far
-  totalFiles?: number; // Total files in batch (undefined for true streaming)
-  bytesProcessed: number; // Plaintext bytes processed
-  totalBytes?: number; // Total plaintext size (undefined for true streaming)
-  chunksUploaded: number; // Chunks uploaded so far
-  subManifestsFlushed: number; // Sub-manifests flushed so far
-  currentFile?: { // Current file being processed
+  filesProcessed: number;
+  totalFiles?: number;
+  bytesProcessed: number;
+  totalBytes?: number;
+  chunksUploaded: number;
+  subManifestsFlushed: number;
+  currentFile?: {
     path: string;
     size: number;
     bytesRead: number;
@@ -214,27 +227,26 @@ interface UploadProgress {
 }
 ```
 
-### ChunkUploadedInfo
+For true lazy `AsyncIterable` inputs, `totalFiles` and `totalBytes` may be
+undefined.
 
-Information about an uploaded chunk.
+### ChunkUploadedInfo
 
 ```typescript
 interface ChunkUploadedInfo {
-  chunkId: string; // Unique chunk identifier
-  cid: string; // CID of uploaded chunk
-  encryptedSize: number; // Encrypted size in bytes
+  chunkId: string;
+  cid: string;
+  encryptedSize: number;
 }
 ```
 
 ### SubManifestFlushedInfo
 
-Information about a flushed sub-manifest.
-
 ```typescript
 interface SubManifestFlushedInfo {
-  index: number; // Sub-manifest index (0-based)
-  cid: string; // CID of uploaded sub-manifest
-  fileCount: number; // Number of files in this sub-manifest
+  index: number;
+  cid: string;
+  fileCount: number;
 }
 ```
 
@@ -244,248 +256,348 @@ interface SubManifestFlushedInfo {
 
 ### getManifest(batchCid, options)
 
-Retrieve and decrypt a batch manifest.
+Retrieves and decrypts a batch manifest from IPFS.
 
 ```typescript
-getManifest(batchCid: string, options: ReadOptions): Promise<BatchManifest>
+function getManifest(
+  batchCid: string,
+  options: GetManifestOptions,
+): Promise<BatchManifest>;
 ```
 
-**Parameters:**
+Most consumers call `module.getManifest(batchCid, options)` with `ReadOptions`.
 
-| Name       | Type          | Description           |
-| ---------- | ------------- | --------------------- |
-| `batchCid` | `string`      | Root CID of the batch |
-| `options`  | `ReadOptions` | Retrieval options     |
+Parameters:
 
-**Returns:** `Promise<BatchManifest>` — Decrypted manifest
+| Name | Type | Description |
+| --- | --- | --- |
+| `batchCid` | `string` | Root CID of the batch |
+| `options` | `ReadOptions` or `GetManifestOptions` | Manifest retrieval options |
 
-**Throws:**
+Returns: `Promise<BatchManifest>`.
 
-- `ValidationError` — Empty or invalid batch CID
-- `ManifestError` — Cannot fetch, parse, or decrypt manifest; sender mismatch
+Throws:
+
+- `ValidationError` for an empty CID, missing `manifestKey`, or invalid key size.
+- `ManifestError` when the manifest cannot be fetched, decrypted, parsed, or has
+  an unsupported version.
 
 ### ReadOptions
 
-Options for manifest retrieval.
+Options for `module.getManifest()` where the IPFS client is bound to the module.
 
 ```typescript
 interface ReadOptions {
-  recipientKeyPair: X25519KeyPair; // Recipient's key pair for unwrapping
-  expectedSenderPublicKey: X25519PublicKey; // Required sender verification
-  signal?: AbortSignal; // Cancellation signal
+  manifestKey: SymmetricKey;
+  signal?: AbortSignal;
 }
 ```
 
+### GetManifestOptions
+
+Options for the standalone `getManifest()` implementation.
+
+```typescript
+interface GetManifestOptions {
+  ipfsClient: IpfsClient;
+  manifestKey: SymmetricKey;
+  signal?: AbortSignal;
+}
+```
+
+### getBatchIdFromManifestBlob(blob)
+
+Parses the plaintext `batch_id` locator prefix from a root manifest IPFS blob.
+
+```typescript
+function getBatchIdFromManifestBlob(blob: Uint8Array): Uint8Array;
+```
+
+The returned value is the first 16 bytes of the blob. This function performs no
+decryption and does not authenticate the encrypted manifest record that follows
+the prefix.
+
+Throws `ValidationError` when the blob is shorter than 16 bytes.
+
 ### BatchManifest
 
-Decrypted batch manifest.
+Decrypted batch manifest. It intentionally does not contain `manifestKey`; the
+caller already owns that key and must pass it again for downloads.
 
 ```typescript
 interface BatchManifest {
-  cid: string; // Batch root CID
-  manifestKey: SymmetricKey; // Manifest encryption key (for file key derivation)
-  senderPublicKey: X25519PublicKey; // Sender's public key
-  directories: DirectoryInfo[]; // All directories in batch
-  files: FileInfo[]; // All files in batch
-  created: number; // Batch creation timestamp (Unix ms)
+  cid: string;
+  manifestVersion: number;
+  directories: DirectoryInfo[];
+  files: FileInfo[];
+  created: number;
 }
 ```
 
 ### FileInfo
 
-File information in manifest.
-
 ```typescript
 interface FileInfo {
-  path: string; // Full path (e.g., "/photos/2024/img.jpg")
-  name: string; // Filename (e.g., "img.jpg")
-  size: number; // Original file size in bytes
-  contentHash: ContentHash; // BLAKE2b content hash
-  chunks: ChunkRef[]; // Chunk references for this file
-  created: number; // Creation timestamp (Unix ms)
+  path: string;
+  name: string;
+  size: number;
+  contentHash: ContentHash;
+  chunks: ChunkRef[];
+  created: number;
 }
 ```
 
 ### DirectoryInfo
 
-Directory information in manifest.
-
 ```typescript
 interface DirectoryInfo {
-  path: string; // Full path (e.g., "/photos/2024")
-  name: string; // Directory name (e.g., "2024")
-  created: number; // Creation timestamp (Unix ms)
+  path: string;
+  name: string;
+  created: number;
 }
 ```
 
 ### ChunkRef
 
-Reference to a chunk within a file.
-
 ```typescript
 interface ChunkRef {
-  chunkId: string; // Unique chunk identifier (base58, 22 chars)
-  cid: string; // IPFS CID of encrypted chunk
-  offset: number; // Byte offset of encrypted segment within chunk
-  length: number; // Original plaintext length
-  encryption: ChunkEncryption; // Encryption method (SINGLE_SHOT or STREAMING)
-  encryptedLength: number; // Actual encrypted segment length (includes padding)
+  chunkId: string;
+  cid: string;
+  offset: number;
+  length: number;
+  encryption: ChunkEncryption;
+  encryptedLength: number;
 }
 ```
+
+`offset` and `encryptedLength` address the encrypted segment inside an IPFS chunk
+object. `length` is the original plaintext segment length after removing PADME
+padding.
 
 ---
 
 ## Download API
 
-### downloadFile(file, options?)
+### downloadFile(file, options)
 
-Download and decrypt a single file.
-
-```typescript
-downloadFile(file: FileDownloadRef, options?: DownloadOptions): AsyncIterable<Uint8Array>
-```
-
-**Parameters:**
-
-| Name      | Type              | Description                     |
-| --------- | ----------------- | ------------------------------- |
-| `file`    | `FileDownloadRef` | File download reference         |
-| `options` | `DownloadOptions` | Optional download configuration |
-
-**Returns:** `AsyncIterable<Uint8Array>` — Decrypted file chunks
-
-**Throws:**
-
-- `ValidationError` — Invalid file reference
-- `ChunkUnavailableError` — Chunk fetch failed after retries
-- `IntegrityError` — Content hash mismatch (in strict mode)
-
-### downloadFiles(files, options?)
-
-Download and decrypt multiple files sequentially (one at a time to bound memory
-usage).
+Downloads and decrypts one file.
 
 ```typescript
-downloadFiles(files: FileDownloadRef[], options?: DownloadFilesOptions): AsyncIterable<DownloadedFile>
+function downloadFile(
+  file: FileDownloadRef,
+  options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  ipfsClient: IpfsClient,
+): Promise<void>;
+
+function downloadFile(
+  file: FileDownloadRef,
+  options: DownloadOptions,
+  ipfsClient: IpfsClient,
+): AsyncIterable<Uint8Array>;
 ```
 
-**Parameters:**
+Most consumers call `module.downloadFile(file, options)`.
 
-| Name      | Type                   | Description                     |
-| --------- | ---------------------- | ------------------------------- |
-| `files`   | `FileDownloadRef[]`    | File download references        |
-| `options` | `DownloadFilesOptions` | Optional download configuration |
+If `options.output` is provided, decrypted bytes are written to the
+caller-owned `WritableStream` and the function returns `Promise<void>`. Without
+`output`, it returns `AsyncIterable<Uint8Array>`.
 
-**Returns:** `AsyncIterable<DownloadedFile>` — Downloaded files (in request
-order)
+Throws:
 
-**Throws:**
+- `ValidationError` for invalid file references or options.
+- `ManifestError` if the root manifest `batch_id` prefix cannot be read.
+- `ChunkUnavailableError` if a chunk cannot be fetched after retries.
+- `IntegrityError` if content hash verification fails in strict mode.
 
-- `ValidationError` — Empty files array
-- First file error (if no `onError` callback provided)
+### downloadFiles(files, options)
+
+Downloads and decrypts multiple files sequentially to bound memory use.
+
+```typescript
+function downloadFiles(
+  files: FileDownloadRef[],
+  options: DownloadFilesOptions,
+  ipfsClient: IpfsClient,
+): AsyncIterable<DownloadedFile>;
+```
+
+Most consumers call `module.downloadFiles(files, options)`.
 
 ### FileDownloadRef
 
-Reference for downloading a file (construct from `BatchManifest`).
+Construct this from `BatchManifest.files`.
 
 ```typescript
 interface FileDownloadRef {
-  batchCid: string; // Batch root CID
-  path: string; // File path (for error messages)
-  size: number; // Original file size in bytes
-  contentHash: ContentHash; // BLAKE2b content hash
-  manifestKey: SymmetricKey; // Manifest key for file key derivation
-  chunks: ChunkRef[]; // Chunk references for this file
+  batchCid: string;
+  path: string;
+  size: number;
+  contentHash: ContentHash;
+  chunks: ChunkRef[];
 }
 ```
 
 ### DownloadOptions
 
-Options for single file download.
-
 ```typescript
 interface DownloadOptions {
-  retries?: number; // Retry attempts per chunk (default: 3)
-  chunkConcurrency?: number; // Parallel chunk fetch (default: 3)
-  signal?: AbortSignal; // Cancellation signal
-  onProgress?: DownloadProgressCallback; // Progress callback
-  integrityMode?: "strict" | "warn"; // Verification mode (default: 'strict')
-  onIntegrityError?: (error: IntegrityError) => void; // Warn mode callback
+  manifestKey: SymmetricKey;
+  retries?: number;
+  chunkConcurrency?: number;
+  signal?: AbortSignal;
+  onProgress?: DownloadProgressCallback;
+  integrityMode?: "strict" | "warn";
+  onIntegrityError?: (error: IntegrityError) => void;
+  output?: WritableStream<Uint8Array>;
 }
 ```
 
-### DownloadFilesOptions
+Fields:
 
-Options for multi-file download.
+| Field | Description |
+| --- | --- |
+| `manifestKey` | Required 32-byte key for chunk key derivation and decryption |
+| `retries` | Retry attempts per chunk; default `3` |
+| `chunkConcurrency` | Parallel chunk fetch concurrency per file; default `3` |
+| `signal` | Optional cancellation signal |
+| `onProgress` | Single-file progress callback |
+| `integrityMode` | `strict` throws on hash mismatch; `warn` reports and continues |
+| `onIntegrityError` | Callback used in `warn` mode |
+| `output` | Optional caller-owned stream sink for decrypted bytes |
+
+### DownloadFilesOptions
 
 ```typescript
 interface DownloadFilesOptions {
-  concurrency?: number; // DEPRECATED: ignored (downloads are sequential)
-  chunkConcurrency?: number; // Parallel chunk fetch per file (default: 3)
-  retries?: number; // Retry attempts per chunk (default: 3)
-  signal?: AbortSignal; // Cancellation signal
-  onProgress?: MultiDownloadProgressCallback; // Aggregate progress callback
-  onError?: DownloadErrorCallback; // Error callback (continue on error)
+  manifestKey: SymmetricKey;
+  concurrency?: number;
+  chunkConcurrency?: number;
+  retries?: number;
+  signal?: AbortSignal;
+  onProgress?: MultiDownloadProgressCallback;
+  onError?: DownloadErrorCallback;
   integrityMode?: "strict" | "warn";
   onIntegrityError?: (error: IntegrityError) => void;
 }
 ```
 
-### DownloadedFile
+`concurrency` is deprecated and ignored. Files are downloaded sequentially;
+chunk-level parallelism is controlled by `chunkConcurrency`.
 
-Result of downloading a file.
+### DownloadedFile
 
 ```typescript
 interface DownloadedFile {
-  path: string; // File path
-  size: number; // Original file size in bytes
-  content: AsyncIterable<Uint8Array>; // Decrypted content
+  path: string;
+  size: number;
+  content: AsyncIterable<Uint8Array>;
 }
 ```
 
 ### DownloadProgress
 
-Single file download progress.
-
 ```typescript
 interface DownloadProgress {
-  bytesDownloaded: number; // Decrypted bytes yielded so far
-  totalBytes: number; // Total file size
+  bytesDownloaded: number;
+  totalBytes: number;
 }
 ```
 
 ### MultiDownloadProgress
 
-Multi-file download aggregate progress.
-
 ```typescript
 interface MultiDownloadProgress {
-  filesCompleted: number; // Files completely downloaded
-  totalFiles: number; // Total files to download
-  bytesDownloaded: number; // Total bytes across all files
-  totalBytes: number; // Total bytes to download
-  currentFile?: string; // Path of file currently downloading
+  filesCompleted: number;
+  totalFiles: number;
+  bytesDownloaded: number;
+  totalBytes: number;
+  currentFile?: string;
 }
 ```
 
 ---
 
+## Wire Format
+
+### Manifest Version
+
+The package exports `MANIFEST_VERSION_SUPPORTED`. The current value is `1`.
+Uploads write this value and manifest retrieval rejects unsupported encrypted
+manifest versions.
+
+```typescript
+import { MANIFEST_VERSION_SUPPORTED } from "@0xd49daa/ipfs-storage";
+```
+
+### Root Manifest Locator Prefix
+
+The root manifest is stored at `/m`. Its blob format is:
+
+```text
+batch_id(16) | encrypted_root_manifest_aead_record
+```
+
+The `batch_id` prefix is plaintext so consumers can identify the batch locator
+before decrypting. The encrypted record still authenticates `batch_id` in AAD;
+tampering with the prefix causes decryption failure.
+
+Sub-manifest blobs do not include this prefix; they are stored directly as AEAD
+records.
+
+### Canonical AEAD Record
+
+Chunks, root manifests after the prefix, and sub-manifests use this record
+layout:
+
+```text
+version(1) | key_scope(1) | nonce(12) | ciphertext | tag(16)
+```
+
+Supported values:
+
+| Name | Value |
+| --- | --- |
+| AEAD record version | `0x01` |
+| Chunk key scope | `0x04` |
+| Manifest key scope | `0x05` |
+| Nonce size | 12 bytes |
+| GCM tag size | 16 bytes |
+| Manifest key size | 32 bytes |
+| Batch id size | 16 bytes |
+
+Manifest AAD contains `version`, manifest key scope, `batch_id`, and
+`manifest_node_id`. Root manifest node id is `0`; sub-manifests use sequential
+ids starting at `1`.
+
+Chunk AAD contains `version`, chunk key scope, `batch_id`, file path hash, and
+chunk index. Chunk file keys are derived from `manifestKey` and the file path
+hash.
+
+### Plaintext Handling
+
+The library never writes plaintext files, OPFS caches, or temporary decrypted
+files. Decrypted bytes are returned to the caller as an async iterable or written
+to the caller-supplied `WritableStream` in `DownloadOptions.output`.
+
+---
+
 ## Error Classes
 
-All errors extend `IpfsStorageError`:
+All package errors extend `IpfsStorageError`.
 
-```
-IpfsStorageError (base)
-├── ValidationError        — Invalid input
-├── IntegrityError         — Content hash mismatch
-├── ManifestError          — Manifest retrieval/decryption failure
-├── ChunkUnavailableError  — Chunk fetch failed
-└── CidMismatchError       — CID verification failed
+```text
+IpfsStorageError
+├── ValidationError
+├── IntegrityError
+├── ManifestError
+├── ChunkUnavailableError
+├── ChunkUploadError
+└── CidMismatchError
 ```
 
 ### IpfsStorageError
 
-Base error class for all package errors.
+Base error class.
 
 ```typescript
 class IpfsStorageError extends Error {
@@ -495,22 +607,22 @@ class IpfsStorageError extends Error {
 
 ### ValidationError
 
-Thrown for invalid input.
+Thrown for invalid input, including:
+
+- Missing or non-32-byte `manifestKey`.
+- Missing or non-16-byte `batch_id`.
+- Empty batch CID.
+- Invalid file paths or directory paths.
+- Invalid retry or concurrency values.
 
 ```typescript
 class ValidationError extends IpfsStorageError {}
 ```
 
-**When thrown:**
-
-- Empty files array
-- Empty recipients array
-- Invalid file path format
-- Invalid configuration values
-
 ### IntegrityError
 
-Thrown when content hash doesn't match.
+Thrown when downloaded plaintext does not match the expected content hash in
+strict integrity mode.
 
 ```typescript
 class IntegrityError extends IpfsStorageError {
@@ -522,7 +634,8 @@ class IntegrityError extends IpfsStorageError {
 
 ### ManifestError
 
-Thrown for manifest retrieval/decryption failures.
+Thrown for manifest retrieval, decryption, parsing, or unsupported version
+failures.
 
 ```typescript
 class ManifestError extends IpfsStorageError {
@@ -530,22 +643,24 @@ class ManifestError extends IpfsStorageError {
 }
 ```
 
-**When thrown:**
-
-- Manifest not found at `/m`
-- Cannot parse protobuf
-- No matching recipient
-- Sender public key mismatch
-- Decryption failure
-
 ### ChunkUnavailableError
 
-Thrown when chunk cannot be fetched after retries.
+Thrown when a chunk cannot be fetched after retries.
 
 ```typescript
 class ChunkUnavailableError extends IpfsStorageError {
   readonly chunkId: string;
   readonly batchCid: string;
+}
+```
+
+### ChunkUploadError
+
+Thrown when a chunk upload fails.
+
+```typescript
+class ChunkUploadError extends IpfsStorageError {
+  readonly cid: string;
 }
 ```
 
@@ -566,14 +681,15 @@ class CidMismatchError extends IpfsStorageError {
 
 ### ChunkEncryption
 
-Encryption method enum.
-
 ```typescript
 enum ChunkEncryption {
-  SINGLE_SHOT = 0, // Single-shot encryption (≤10MB chunks)
-  STREAMING = 1, // Streaming encryption (>10MB chunks)
+  SINGLE_SHOT = 0,
+  STREAMING = 1,
 }
 ```
+
+The current Vault AEAD implementation emits `SINGLE_SHOT` records for encrypted
+segments. The enum remains part of the manifest type surface.
 
 ### Callback Types
 
@@ -586,6 +702,15 @@ type MultiDownloadProgressCallback = (progress: MultiDownloadProgress) => void;
 type DownloadErrorCallback = (error: Error, file: FileDownloadRef) => void;
 ```
 
+### Utility
+
+```typescript
+function asAsyncIterable<T>(items: Iterable<T>): AsyncIterable<T>;
+```
+
+Converts an in-memory iterable to an async iterable for tests, examples, and
+small inputs.
+
 ---
 
 ## Re-exported Types
@@ -594,13 +719,13 @@ The following types are re-exported from `@0xd49daa/safecrypt` for convenience:
 
 ```typescript
 export type {
-  ContentHash, // 32-byte BLAKE2b content hash
-  SymmetricKey, // 32-byte symmetric encryption key
-  X25519KeyPair, // Public/private key pair
-  X25519PrivateKey, // 32-byte X25519 private key
-  X25519PublicKey, // 32-byte X25519 public key
+  ContentHash,
+  SymmetricKey,
 } from "@0xd49daa/safecrypt";
 ```
+
+Asymmetric key pair and public/private key types are not re-exported by this
+package.
 
 ---
 
@@ -610,46 +735,31 @@ Interface for IPFS client implementations.
 
 ```typescript
 interface IpfsClient {
-  /**
-   * Upload a CAR file. Must be atomic - all blocks stored or none.
-   */
   uploadCar(car: Uint8Array): Promise<string>;
-
-  /**
-   * Retrieve content by CID, optionally with path.
-   * @param cid - Root CID
-   * @param path - Optional path within UnixFS directory (e.g., "/m", "/6B/v7/abc123")
-   */
   cat(cid: string, path?: string): AsyncIterable<Uint8Array>;
-
-  /**
-   * Check if a CID exists.
-   */
   has(cid: string): Promise<boolean>;
 }
 ```
 
 ### MockIpfsClient
 
-In-memory mock implementation for testing.
+In-memory mock implementation for tests and examples.
 
 ```typescript
 class MockIpfsClient implements IpfsClient {
   constructor(options?: MockIpfsClientOptions);
 
-  // IpfsClient methods
   uploadCar(car: Uint8Array): Promise<string>;
   cat(cid: string, path?: string): AsyncIterable<Uint8Array>;
   has(cid: string): Promise<boolean>;
 
-  // Test helpers
-  clear(): void; // Reset all state
-  getBlock(cid: string): Uint8Array | undefined; // Get raw block
-  getBlockCount(): number; // Count stored blocks
-  isRoot(cid: string): boolean; // Check if CID is a root
-  setFailNextUpload(error: Error): void; // Simulate upload failure
-  clearFailNextUpload(): void; // Clear failure simulation
-  setUploadLatch(signal: AbortSignal): Promise<void>; // Pause upload (for testing)
-  clearUploadLatch(): void; // Release upload latch
+  clear(): void;
+  getBlock(cid: string): Uint8Array | undefined;
+  getBlockCount(): number;
+  isRoot(cid: string): boolean;
+  setFailNextUpload(error: Error): void;
+  clearFailNextUpload(): void;
+  setUploadLatch(signal: AbortSignal): Promise<void>;
+  clearUploadLatch(): void;
 }
 ```

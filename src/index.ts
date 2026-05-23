@@ -52,6 +52,7 @@ export type {
 // =============================================================================
 
 export { uploadBatch } from "./streaming-upload.ts";
+export { getBatchIdFromManifestBlob } from "./manifest-retrieval.ts";
 
 // =============================================================================
 // Utility for Array to AsyncIterable Conversion

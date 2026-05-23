@@ -20,7 +20,6 @@ function buildFileRef(manifest: BatchManifest, path: string): FileDownloadRef {
     path: fileInfo.path,
     size: fileInfo.size,
     contentHash: fileInfo.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: fileInfo.chunks,
   };
 }
@@ -61,7 +60,9 @@ describe("E2E Basic Upload & Download", () => {
     const downloadRef = buildFileRef(manifest, "/hello.txt");
 
     const chunks: Uint8Array[] = [];
-    for await (const chunk of module.downloadFile(downloadRef)) {
+    for await (
+      const chunk of module.downloadFile(downloadRef, { manifestKey })
+    ) {
       chunks.push(chunk);
     }
 

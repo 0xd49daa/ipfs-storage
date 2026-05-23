@@ -18,6 +18,7 @@ import type {
 import { downloadFile } from "./download.ts";
 import { ValidationError } from "./errors.ts";
 import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
+import { VAULT_AES_256_KEY_SIZE } from "./vault-aead.ts";
 
 // ============================================================================
 // Helper Functions
@@ -87,7 +88,7 @@ async function* yieldInChunks(
  * downloads are always sequential to bound memory usage.
  *
  * @param refs - Array of file download references
- * @param options - Download options (can be undefined, all fields have defaults)
+ * @param options - Download options including caller-supplied manifestKey
  * @param ipfsClient - IPFS client for content retrieval
  * @returns AsyncIterable yielding DownloadedFile objects in request order
  * @throws ValidationError - Empty refs array
@@ -96,11 +97,16 @@ async function* yieldInChunks(
  */
 export async function* downloadFiles(
   refs: FileDownloadRef[],
-  options: DownloadFilesOptions | undefined,
+  options: DownloadFilesOptions,
   ipfsClient: IpfsClient,
 ): AsyncIterable<DownloadedFile> {
+  if (!options || typeof options !== "object") {
+    throw new ValidationError("options must be an object");
+  }
+
   // Extract options with defaults
   const {
+    manifestKey,
     concurrency = 1, // Accepted for API compatibility, but downloads are sequential
     chunkConcurrency = DEFAULT_CHUNK_CONCURRENCY,
     retries = DEFAULT_RETRIES,
@@ -109,7 +115,7 @@ export async function* downloadFiles(
     onError,
     integrityMode = "strict",
     onIntegrityError,
-  } = options ?? {};
+  } = options;
 
   // Check abort before starting
   checkAbort(signal);
@@ -117,6 +123,14 @@ export async function* downloadFiles(
   // Validate inputs
   if (refs.length === 0) {
     throw new ValidationError("refs array must not be empty");
+  }
+  if (!manifestKey) {
+    throw new ValidationError("manifestKey is required");
+  }
+  if (manifestKey.length !== VAULT_AES_256_KEY_SIZE) {
+    throw new ValidationError(
+      `manifestKey must be ${VAULT_AES_256_KEY_SIZE} bytes, got ${manifestKey.length}`,
+    );
   }
   if (concurrency < 1) {
     throw new ValidationError("concurrency must be at least 1");
@@ -156,6 +170,7 @@ export async function* downloadFiles(
       const contentIterable = downloadFile(
         ref,
         {
+          manifestKey,
           retries,
           chunkConcurrency,
           signal,

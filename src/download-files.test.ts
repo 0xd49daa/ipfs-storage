@@ -2,7 +2,6 @@ import { beforeAll, describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import {
   type ContentHash,
-  generateKey,
   hashBlake2b,
   preloadSodium,
   type SymmetricKey,
@@ -92,7 +91,6 @@ async function uploadAndGetRefs(
     path: f.path,
     size: f.size,
     contentHash: f.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: f.chunks,
   }));
 }
@@ -102,7 +100,7 @@ describe("downloadFiles", () => {
     test("throws ValidationError for empty refs array", async () => {
       const client = new MockIpfsClient();
       await expect(
-        collectAsyncIterable(downloadFiles([], undefined, client)),
+        collectAsyncIterable(downloadFiles([], { manifestKey }, client)),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -115,16 +113,17 @@ describe("downloadFiles", () => {
         path: "/test.txt",
         size: 7,
         contentHash: fakeHash,
-        manifestKey: await generateKey(),
         chunks: [],
       };
 
       await expect(
-        collectAsyncIterable(downloadFiles([ref], { concurrency: 0 }, client)),
+        collectAsyncIterable(
+          downloadFiles([ref], { manifestKey, concurrency: 0 }, client),
+        ),
       ).rejects.toThrow(ValidationError);
       await expect(
         collectAsyncIterable(
-          downloadFiles([ref], { chunkConcurrency: 0 }, client),
+          downloadFiles([ref], { manifestKey, chunkConcurrency: 0 }, client),
         ),
       ).rejects.toThrow(ValidationError);
     });
@@ -139,7 +138,7 @@ describe("downloadFiles", () => {
       );
 
       const downloadedFiles = await collectAsyncIterable(
-        downloadFiles(refs, undefined, client),
+        downloadFiles(refs, { manifestKey }, client),
       );
 
       expect(downloadedFiles).toHaveLength(1);
@@ -160,7 +159,7 @@ describe("downloadFiles", () => {
       );
 
       const downloadedFiles = await collectAsyncIterable(
-        downloadFiles(refs, { concurrency: 2 }, client),
+        downloadFiles(refs, { manifestKey, concurrency: 2 }, client),
       );
 
       expect(downloadedFiles.map((f) => f.path)).toEqual([
@@ -185,7 +184,10 @@ describe("downloadFiles", () => {
       const downloadedFiles = await collectAsyncIterable(
         downloadFiles(
           refs,
-          { onProgress: (progress) => progressUpdates.push({ ...progress }) },
+          {
+            manifestKey,
+            onProgress: (progress) => progressUpdates.push({ ...progress }),
+          },
           client,
         ),
       );
@@ -217,7 +219,6 @@ describe("downloadFiles", () => {
         path: "/bad.txt",
         size: 10,
         contentHash: fakeHash,
-        manifestKey: refs[0]!.manifestKey,
         chunks: [
           {
             chunkId: "badchunk12345678901234",
@@ -235,7 +236,10 @@ describe("downloadFiles", () => {
       const downloadedFiles = await collectAsyncIterable(
         downloadFiles(
           [refs[0]!, badRef, refs[1]!],
-          { onError: (error, ref) => errors.push({ path: ref.path, error }) },
+          {
+            manifestKey,
+            onError: (error, ref) => errors.push({ path: ref.path, error }),
+          },
           client,
         ),
       );

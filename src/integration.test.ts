@@ -86,7 +86,6 @@ function buildFileRef(
     path: fileInfo.path,
     size: fileInfo.size,
     contentHash: fileInfo.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: fileInfo.chunks,
   };
 }
@@ -97,7 +96,6 @@ function buildAllFileRefs(manifest: BatchManifest): FileDownloadRef[] {
     path: f.path,
     size: f.size,
     contentHash: f.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: f.chunks,
   }));
 }
@@ -126,7 +124,9 @@ describe("Integration: symmetric API", () => {
     expect(manifest.files).toHaveLength(1);
 
     const downloaded = await collectBytes(
-      module.downloadFile(buildFileRef(manifest, "/hello.txt")),
+      module.downloadFile(buildFileRef(manifest, "/hello.txt"), {
+        manifestKey,
+      }),
     );
     expect(new TextDecoder().decode(downloaded)).toBe(content);
   });
@@ -145,7 +145,11 @@ describe("Integration: symmetric API", () => {
     const manifest = await module.getManifest(result.cid, { manifestKey });
     const downloaded = new Map<string, string>();
 
-    for await (const file of module.downloadFiles(buildAllFileRefs(manifest))) {
+    for await (
+      const file of module.downloadFiles(buildAllFileRefs(manifest), {
+        manifestKey,
+      })
+    ) {
       downloaded.set(
         file.path,
         new TextDecoder().decode(await collectBytes(file.content)),
@@ -171,9 +175,14 @@ describe("Integration: symmetric API", () => {
     expect(manifest.files[0]!.chunks.length).toBeGreaterThan(1);
 
     const downloaded = await collectBytes(
-      module.downloadFile(buildFileRef(manifest, "/large.bin")),
+      module.downloadFile(buildFileRef(manifest, "/large.bin"), {
+        manifestKey,
+      }),
     );
-    expect(downloaded).toEqual(data);
+    expect(downloaded.length).toBe(data.length);
+    expect(await hashBlake2b(downloaded, 32)).toEqual(
+      await hashBlake2b(data, 32),
+    );
   });
 
   test("explicit empty directories are preserved", async () => {
@@ -215,7 +224,11 @@ describe("Integration: symmetric API", () => {
     const downloaded = new Map<string, string>();
 
     expect(result.renamed).toHaveLength(2);
-    for await (const file of module.downloadFiles(buildAllFileRefs(manifest))) {
+    for await (
+      const file of module.downloadFiles(buildAllFileRefs(manifest), {
+        manifestKey,
+      })
+    ) {
       downloaded.set(
         file.path,
         new TextDecoder().decode(await collectBytes(file.content)),
