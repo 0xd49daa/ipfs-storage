@@ -38,6 +38,7 @@ import { PathManager } from "./conflicts.ts";
 import { DirectoryTreeBuilder } from "./directories.ts";
 import { chunkIdToPath, generateChunkId } from "./chunk-id.ts";
 import { buildManifest, encryptManifest } from "./manifest-builder.ts";
+import { padManifestPlaintext } from "./manifest-padding.ts";
 import { computeDagPbCid, computeRawCid } from "./ipfs-client.ts";
 import { basename } from "./path-utils.ts";
 import { padme } from "./padme.ts";
@@ -284,8 +285,17 @@ async function encryptSegment(
   filePathWithinBatch: string,
   chunkIndex: number,
 ): Promise<{ encrypted: Uint8Array; encryption: ChunkEncryption }> {
+  const paddedLength = padme(plaintext.length);
+  const paddedPlaintext = paddedLength === plaintext.length
+    ? plaintext
+    : (() => {
+      const padded = new Uint8Array(paddedLength);
+      padded.set(plaintext, 0);
+      return padded;
+    })();
+
   const encrypted = await encryptVaultChunkRecord({
-    plaintext,
+    plaintext: paddedPlaintext,
     manifestKey,
     batchId,
     filePathWithinBatch,
@@ -430,10 +440,9 @@ class AggregationBufferManager {
   }
 
   /**
-   * Flush current buffer as a chunk.
-   * @param isFinal - Whether to apply PADME padding
+    * Flush current buffer as a chunk.
    */
-  async flush(isFinal: boolean): Promise<UploadedChunk | null> {
+  async flush(_isFinal: boolean): Promise<UploadedChunk | null> {
     const totalSegmentCount = this.segments.length + this.streamSegments.length;
     if (totalSegmentCount === 0) {
       return null;
@@ -448,26 +457,13 @@ class AggregationBufferManager {
     const segmentInfos: UploadedChunk["segments"] = [];
     let encryptedOffset = 0;
     let totalPlaintext = 0;
-    let processedCount = 0;
 
     // Process eager segments (Uint8Array-based)
     for (let i = 0; i < this.segments.length; i++) {
       const segment = this.segments[i]!;
-      let plaintext = segment.data;
+      const plaintext = segment.data;
       const originalLength = plaintext.length;
       totalPlaintext += originalLength;
-
-      // Apply PADME to last segment of final chunk (only if no stream segments follow)
-      const isLastSegment = processedCount === totalSegmentCount - 1;
-      if (isFinal && isLastSegment) {
-        const paddedSize = padme(this.totalSize);
-        const paddingNeeded = paddedSize - this.totalSize;
-        if (paddingNeeded > 0) {
-          const padded = new Uint8Array(plaintext.length + paddingNeeded);
-          padded.set(plaintext, 0);
-          plaintext = padded;
-        }
-      }
 
       checkAbort(this.context.signal);
 
@@ -488,7 +484,6 @@ class AggregationBufferManager {
 
       encryptedParts.push(encrypted);
       encryptedOffset += encrypted.length;
-      processedCount++;
     }
 
     // Process stream segments (lazy loading)
@@ -496,24 +491,12 @@ class AggregationBufferManager {
       const segment = this.streamSegments[i]!;
 
       // Read stream fully at flush time (lazy consumption)
-      let plaintext = await this.readStreamFully(
+      const plaintext = await this.readStreamFully(
         segment.getStream,
         segment.size,
       );
       const originalLength = plaintext.length;
       totalPlaintext += originalLength;
-
-      // Apply PADME to last segment of final chunk
-      const isLastSegment = processedCount === totalSegmentCount - 1;
-      if (isFinal && isLastSegment) {
-        const paddedSize = padme(this.totalSize);
-        const paddingNeeded = paddedSize - this.totalSize;
-        if (paddingNeeded > 0) {
-          const padded = new Uint8Array(plaintext.length + paddingNeeded);
-          padded.set(plaintext, 0);
-          plaintext = padded;
-        }
-      }
 
       checkAbort(this.context.signal);
 
@@ -534,7 +517,6 @@ class AggregationBufferManager {
 
       encryptedParts.push(encrypted);
       encryptedOffset += encrypted.length;
-      processedCount++;
     }
 
     // Concatenate encrypted parts
@@ -840,7 +822,7 @@ class IncrementalManifestBuilder {
     const serialized = encodeSubManifest(subManifestData);
 
     const encrypted = await encryptVaultManifestRecord({
-      plaintext: serialized,
+      plaintext: padManifestPlaintext(serialized),
       manifestKey: this.manifestKey,
       batchId: this.context.batchId,
       manifestNodeId: this.flushedSubManifests.length + 1,
@@ -1386,7 +1368,7 @@ export async function uploadBatch(
     chunkCidMap,
     envelope,
     encryptedSubManifests,
-    context.uploadedSubManifests.map((sm) => sm.cid),
+    [],
   );
 
   checkAbort(signal);
@@ -1401,7 +1383,6 @@ export async function uploadBatch(
   const batchManifest: BatchManifest = {
     cid: finalCarResult.rootCid,
     manifestVersion: MANIFEST_VERSION_SUPPORTED,
-    manifestKey,
     directories: context.directories,
     files: context.fileInfos,
     created,

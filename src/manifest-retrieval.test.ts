@@ -3,7 +3,6 @@ import { expect } from "@std/expect";
 import { create, toBinary } from "@bufbuild/protobuf";
 import {
   type ContentHash,
-  encrypt,
   hashBlake2b,
   preloadSodium,
   type SymmetricKey,
@@ -15,11 +14,18 @@ import {
   type StreamingFileInput,
   ValidationError,
 } from "./index.ts";
-import { getManifest } from "./manifest-retrieval.ts";
+import {
+  getBatchIdFromManifestBlob,
+  getManifest,
+} from "./manifest-retrieval.ts";
 import { uploadBatch } from "./streaming-upload.ts";
-import { encodeManifestEnvelope } from "./serialization.ts";
+import { padManifestPlaintext } from "./manifest-padding.ts";
 import { RootManifestSchema } from "./gen/manifest_pb.ts";
-import { MANIFEST_DOMAIN, MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
+import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
+import {
+  encryptVaultManifestRecord,
+  VAULT_BATCH_ID_SIZE,
+} from "./vault-aead.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(2);
@@ -47,17 +53,49 @@ async function createFileInput(
   };
 }
 
-function combineNonceAndCiphertext(encrypted: {
-  nonce: Uint8Array;
-  ciphertext: Uint8Array;
-}): Uint8Array {
-  const combined = new Uint8Array(
-    encrypted.nonce.length + encrypted.ciphertext.length,
-  );
-  combined.set(encrypted.nonce, 0);
-  combined.set(encrypted.ciphertext, encrypted.nonce.length);
-  return combined;
+async function collectBytes(
+  iterable: AsyncIterable<Uint8Array>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of iterable) {
+    chunks.push(chunk);
+  }
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
+
+function createRootManifestBlob(batchId: Uint8Array, record: Uint8Array) {
+  const blob = new Uint8Array(batchId.length + record.length);
+  blob.set(batchId, 0);
+  blob.set(record, batchId.length);
+  return blob;
+}
+
+describe("getBatchIdFromManifestBlob", () => {
+  test("returns exactly the first 16 bytes", () => {
+    const blob = new Uint8Array(32);
+    for (let i = 0; i < blob.length; i++) blob[i] = i;
+
+    expect(getBatchIdFromManifestBlob(blob)).toEqual(
+      blob.slice(0, VAULT_BATCH_ID_SIZE),
+    );
+  });
+
+  test("rejects too-short blobs", () => {
+    expect(() => getBatchIdFromManifestBlob(new Uint8Array(15))).toThrow(
+      ValidationError,
+    );
+    expect(() => getBatchIdFromManifestBlob(new Uint8Array(15))).toThrow(
+      "Root manifest blob too short",
+    );
+  });
+});
 
 describe("getManifest", () => {
   test("retrieves and decrypts manifest with manifestKey", async () => {
@@ -73,7 +111,7 @@ describe("getManifest", () => {
 
     expect(manifest.cid).toBe(result.cid);
     expect(manifest.manifestVersion).toBe(MANIFEST_VERSION_SUPPORTED);
-    expect(manifest.manifestKey).toEqual(manifestKey);
+    expect("manifestKey" in manifest).toBe(false);
     expect("senderPublicKey" in manifest).toBe(false);
     expect(manifest.files).toHaveLength(1);
     expect(manifest.files[0]!.path).toBe("/hello.txt");
@@ -128,6 +166,28 @@ describe("getManifest", () => {
     ).rejects.toThrow(ManifestError);
   });
 
+  test("decrypts paginated sub-manifests", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const longName = "a".repeat(3900);
+    const files = await Promise.all(
+      Array.from({ length: 180 }, (_, index) =>
+        createFileInput(
+          "",
+          `/${index.toString().padStart(3, "0")}-${longName}.txt`,
+        )),
+    );
+    const result = await uploadBatch(
+      asAsyncIterable(files),
+      { manifestKey, batch_id },
+      ipfsClient,
+    );
+
+    expect(result.manifestCount).toBeGreaterThan(1);
+
+    const manifest = await getManifest(result.cid, { ipfsClient, manifestKey });
+    expect(manifest.files).toHaveLength(files.length);
+  });
+
   test("unsupported manifest version fails with ManifestError", async () => {
     const root = create(RootManifestSchema, {
       manifestVersion: MANIFEST_VERSION_SUPPORTED + 1,
@@ -137,19 +197,18 @@ describe("getManifest", () => {
       created: 1700000000000n,
     });
     const rootBytes = toBinary(RootManifestSchema, root);
-    const encrypted = await encrypt(
-      rootBytes,
+    const encrypted = await encryptVaultManifestRecord({
+      plaintext: padManifestPlaintext(rootBytes),
       manifestKey,
-      new TextEncoder().encode(MANIFEST_DOMAIN.ROOT),
-    );
-    const envelope = encodeManifestEnvelope({
-      encryptedManifest: combineNonceAndCiphertext(encrypted),
+      batchId: batch_id,
+      manifestNodeId: 0,
     });
+    const rootBlob = createRootManifestBlob(batch_id, encrypted);
     const ipfsClient = {
       uploadCar: async () => "unused",
       has: async () => true,
       async *cat() {
-        yield envelope;
+        yield rootBlob;
       },
     };
 
@@ -159,5 +218,30 @@ describe("getManifest", () => {
     await expect(
       getManifest("bafytest", { ipfsClient, manifestKey }),
     ).rejects.toThrow(/Unsupported manifest version/);
+  });
+
+  test("tampered root plaintext batch_id prefix fails decrypt", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const file = await createFileInput("secret", "/secret.txt");
+    const result = await uploadBatch(
+      asAsyncIterable([file]),
+      { manifestKey, batch_id },
+      ipfsClient,
+    );
+    const rootBlob = await collectBytes(ipfsClient.cat(result.cid, "/m"));
+
+    const tampered = rootBlob.slice();
+    tampered[0] = tampered[0]! ^ 0x01;
+    const tamperedClient = {
+      uploadCar: async () => "unused",
+      has: async () => true,
+      async *cat(_cid: string, path?: string) {
+        if (path === "/m") yield tampered;
+      },
+    };
+
+    await expect(
+      getManifest(result.cid, { ipfsClient: tamperedClient, manifestKey }),
+    ).rejects.toThrow(ManifestError);
   });
 });

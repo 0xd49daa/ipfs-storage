@@ -67,6 +67,21 @@ export function createIpfsStorageModule(
 
   const ipfsClient: IpfsClient = config.ipfsClient;
 
+  function downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  ): Promise<void>;
+  function downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
+  ): AsyncIterable<Uint8Array>;
+  function downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
+  ): AsyncIterable<Uint8Array> | Promise<void> {
+    return downloadFileImpl(file, options, ipfsClient);
+  }
+
   return {
     uploadBatch(
       files: AsyncIterable<StreamingFileInput>,
@@ -86,16 +101,11 @@ export function createIpfsStorageModule(
       });
     },
 
-    downloadFile(
-      file: FileDownloadRef,
-      options?: DownloadOptions,
-    ): AsyncIterable<Uint8Array> {
-      return downloadFileImpl(file, options, ipfsClient);
-    },
+    downloadFile,
 
     downloadFiles(
       files: FileDownloadRef[],
-      options?: DownloadFilesOptions,
+      options: DownloadFilesOptions,
     ): AsyncIterable<DownloadedFile> {
       return downloadFilesImpl(files, options, ipfsClient);
     },

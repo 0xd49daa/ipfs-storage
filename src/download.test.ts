@@ -8,7 +8,6 @@ import {
   type ContentHash,
   hashBlake2b,
   preloadSodium,
-  type SymmetricKey,
 } from "@0xd49daa/safecrypt";
 import {
   type BatchManifest,
@@ -141,7 +140,6 @@ async function uploadAndGetRef(
     path: fileInfo.path,
     size: fileInfo.size,
     contentHash: fileInfo.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: fileInfo.chunks,
   };
 
@@ -160,15 +158,16 @@ describe("downloadFile - validation", () => {
       path: "/test.txt",
       size: 10,
       contentHash: new Uint8Array(32) as ContentHash,
-      manifestKey: new Uint8Array(32) as SymmetricKey,
       chunks: [],
     };
 
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         ValidationError,
       );
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         "batchCid must be a non-empty string",
       );
@@ -181,15 +180,16 @@ describe("downloadFile - validation", () => {
       path: "",
       size: 10,
       contentHash: new Uint8Array(32) as ContentHash,
-      manifestKey: new Uint8Array(32) as SymmetricKey,
       chunks: [],
     };
 
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         ValidationError,
       );
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         "path must be a non-empty string",
       );
@@ -202,15 +202,16 @@ describe("downloadFile - validation", () => {
       path: "/test.txt",
       size: -1,
       contentHash: new Uint8Array(32) as ContentHash,
-      manifestKey: new Uint8Array(32) as SymmetricKey,
       chunks: [],
     };
 
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         ValidationError,
       );
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         "size must be a non-negative number",
       );
@@ -223,15 +224,16 @@ describe("downloadFile - validation", () => {
       path: "/test.txt",
       size: 100,
       contentHash: new Uint8Array(32) as ContentHash,
-      manifestKey: new Uint8Array(32) as SymmetricKey,
       chunks: [],
     };
 
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         ValidationError,
       );
-    await expect(collectBytes(downloadFile(ref, undefined, ipfsClient))).rejects
+    await expect(collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)))
+      .rejects
       .toThrow(
         "non-empty file must have at least one chunk",
       );
@@ -244,19 +246,24 @@ describe("downloadFile - validation", () => {
       path: "/test.txt",
       size: 0, // Empty file to avoid chunk validation
       contentHash: new Uint8Array(32) as ContentHash,
-      manifestKey: new Uint8Array(32) as SymmetricKey,
       chunks: [],
     };
 
     await expect(
-      collectBytes(downloadFile(ref, { chunkConcurrency: 0 }, ipfsClient)),
+      collectBytes(
+        downloadFile(ref, { manifestKey, chunkConcurrency: 0 }, ipfsClient),
+      ),
     ).rejects.toThrow(ValidationError);
     await expect(
-      collectBytes(downloadFile(ref, { chunkConcurrency: 0 }, ipfsClient)),
+      collectBytes(
+        downloadFile(ref, { manifestKey, chunkConcurrency: 0 }, ipfsClient),
+      ),
     ).rejects.toThrow("chunkConcurrency must be at least 1");
 
     await expect(
-      collectBytes(downloadFile(ref, { chunkConcurrency: -1 }, ipfsClient)),
+      collectBytes(
+        downloadFile(ref, { manifestKey, chunkConcurrency: -1 }, ipfsClient),
+      ),
     ).rejects.toThrow(ValidationError);
   });
 });
@@ -275,7 +282,7 @@ describe("downloadFile - basic functionality", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(downloaded).toEqual(originalContent);
@@ -291,7 +298,7 @@ describe("downloadFile - basic functionality", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(new TextDecoder().decode(downloaded)).toBe(content);
@@ -310,7 +317,7 @@ describe("downloadFile - basic functionality", () => {
     expect(ref.chunks.length).toBe(0);
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(downloaded.length).toBe(0);
@@ -327,6 +334,7 @@ describe("downloadFile - basic functionality", () => {
 
     const progressUpdates: DownloadProgress[] = [];
     const options: DownloadOptions = {
+      manifestKey,
       onProgress: (progress) => progressUpdates.push({ ...progress }),
     };
 
@@ -338,6 +346,47 @@ describe("downloadFile - basic functionality", () => {
     const finalProgress = progressUpdates[progressUpdates.length - 1]!;
     expect(finalProgress.bytesDownloaded).toBe(ref.size);
     expect(finalProgress.totalBytes).toBe(ref.size);
+  });
+
+  test("writes decrypted bytes to a caller-supplied WritableStream", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const { ref, originalContent } = await uploadAndGetRef(
+      "stream me to a sink",
+      "/stream.txt",
+      ipfsClient,
+    );
+
+    const chunks: Uint8Array[] = [];
+    const progressUpdates: DownloadProgress[] = [];
+    const output = new WritableStream<Uint8Array>({
+      write(chunk) {
+        chunks.push(chunk.slice());
+      },
+    });
+
+    await downloadFile(
+      ref,
+      {
+        manifestKey,
+        output,
+        onProgress: (progress) => progressUpdates.push({ ...progress }),
+      },
+      ipfsClient,
+    );
+
+    const downloaded = new Uint8Array(
+      chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+    );
+    let offset = 0;
+    for (const chunk of chunks) {
+      downloaded.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    expect(downloaded).toEqual(originalContent);
+    expect(progressUpdates[progressUpdates.length - 1]!.bytesDownloaded).toBe(
+      ref.size,
+    );
   });
 });
 
@@ -362,7 +411,7 @@ describe("downloadFile - multi-chunk files", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(downloaded).toEqual(originalContent);
@@ -384,7 +433,7 @@ describe("downloadFile - multi-chunk files", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(downloaded.length).toBe(originalContent.length);
@@ -406,7 +455,7 @@ describe("downloadFile - concurrent fetch", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, { chunkConcurrency: 1 }, ipfsClient),
+      downloadFile(ref, { manifestKey, chunkConcurrency: 1 }, ipfsClient),
     );
 
     expect(downloaded).toEqual(originalContent);
@@ -421,7 +470,7 @@ describe("downloadFile - concurrent fetch", () => {
     );
 
     const downloaded = await collectBytes(
-      downloadFile(ref, { chunkConcurrency: 3 }, ipfsClient),
+      downloadFile(ref, { manifestKey, chunkConcurrency: 3 }, ipfsClient),
     );
 
     expect(downloaded).toEqual(originalContent);
@@ -440,12 +489,25 @@ describe("downloadFile - retry logic", () => {
       "/test.txt",
       ipfsClient,
     );
-
-    // Clear the client so the chunk is no longer available
-    ipfsClient.clear();
+    const rootManifestBlob = await collectBytes(
+      ipfsClient.cat(ref.batchCid, "/m"),
+    );
+    const missingChunkClient = {
+      uploadCar: async () => "unused",
+      has: async () => false,
+      async *cat(_cid: string, path?: string) {
+        if (path === "/m") {
+          yield rootManifestBlob;
+          return;
+        }
+        throw new Error("Chunk missing");
+      },
+    };
 
     await expect(
-      collectBytes(downloadFile(ref, { retries: 2 }, ipfsClient)),
+      collectBytes(
+        downloadFile(ref, { manifestKey, retries: 2 }, missingChunkClient),
+      ),
     ).rejects.toThrow(ChunkUnavailableError);
   });
 
@@ -456,12 +518,25 @@ describe("downloadFile - retry logic", () => {
       "/test.txt",
       ipfsClient,
     );
-
-    // Clear the client so the chunk is no longer available
-    ipfsClient.clear();
+    const rootManifestBlob = await collectBytes(
+      ipfsClient.cat(ref.batchCid, "/m"),
+    );
+    const missingChunkClient = {
+      uploadCar: async () => "unused",
+      has: async () => false,
+      async *cat(_cid: string, path?: string) {
+        if (path === "/m") {
+          yield rootManifestBlob;
+          return;
+        }
+        throw new Error("Chunk missing");
+      },
+    };
 
     try {
-      await collectBytes(downloadFile(ref, { retries: 1 }, ipfsClient));
+      await collectBytes(
+        downloadFile(ref, { manifestKey, retries: 1 }, missingChunkClient),
+      );
       throw new Error("Should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(ChunkUnavailableError);
@@ -487,7 +562,7 @@ describe("downloadFile - integrity verification", () => {
 
     // Should not throw
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
     expect(downloaded).toEqual(originalContent);
   });
@@ -498,7 +573,7 @@ describe("downloadFile - integrity verification", () => {
 
     // Should not throw - empty file with correct hash
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
     expect(downloaded.length).toBe(0);
   });
@@ -513,9 +588,41 @@ describe("downloadFile - integrity verification", () => {
 
     // Without explicitly setting integrityMode, should still verify
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
     expect(downloaded).toEqual(originalContent);
+  });
+
+  test("wrong manifestKey fails chunk authentication", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const { ref } = await uploadAndGetRef(
+      "Hello, World!",
+      "/test.txt",
+      ipfsClient,
+    );
+    const wrongKey = new Uint8Array(32).fill(9) as typeof manifestKey;
+
+    await expect(
+      collectBytes(downloadFile(ref, { manifestKey: wrongKey }, ipfsClient)),
+    ).rejects.toThrow();
+  });
+
+  test("tampered encrypted chunk content fails authentication", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const { ref } = await uploadAndGetRef(
+      "Hello, World!",
+      "/test.txt",
+      ipfsClient,
+    );
+    const chunkRef = ref.chunks[0]!;
+    const chunkBytes = ipfsClient.getBlock(chunkRef.cid)!;
+    const tampered = chunkBytes.slice();
+    tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 0x01;
+    ipfsClient.putBlock(chunkRef.cid, tampered);
+
+    await expect(
+      collectBytes(downloadFile(ref, { manifestKey }, ipfsClient)),
+    ).rejects.toThrow();
   });
 
   test("integrityMode warn allows passing callback", async () => {
@@ -532,6 +639,7 @@ describe("downloadFile - integrity verification", () => {
       downloadFile(
         ref,
         {
+          manifestKey,
           integrityMode: "warn",
           onIntegrityError: () => {
             callbackCalled = true;
@@ -564,7 +672,11 @@ describe("downloadFile - abort signal", () => {
 
     try {
       await collectBytes(
-        downloadFile(ref, { signal: controller.signal }, ipfsClient),
+        downloadFile(
+          ref,
+          { manifestKey, signal: controller.signal },
+          ipfsClient,
+        ),
       );
       throw new Error("Should have thrown");
     } catch (error) {
@@ -586,7 +698,11 @@ describe("downloadFile - abort signal", () => {
 
     try {
       await collectBytes(
-        downloadFile(ref, { signal: controller.signal }, ipfsClient),
+        downloadFile(
+          ref,
+          { manifestKey, signal: controller.signal },
+          ipfsClient,
+        ),
       );
       throw new Error("Should have thrown");
     } catch (error) {
@@ -620,7 +736,11 @@ describe("downloadFile - abort signal", () => {
 
     try {
       await collectBytes(
-        downloadFile(ref, { signal: controller.signal }, ipfsClient),
+        downloadFile(
+          ref,
+          { manifestKey, signal: controller.signal },
+          ipfsClient,
+        ),
       );
       throw new Error("Should have thrown");
     } catch (error) {
@@ -661,7 +781,11 @@ describe("downloadFile - abort signal", () => {
 
     try {
       await collectBytes(
-        downloadFile(ref, { signal: controller.signal }, ipfsClient),
+        downloadFile(
+          ref,
+          { manifestKey, signal: controller.signal },
+          ipfsClient,
+        ),
       );
       throw new Error("Should have thrown");
     } catch (error) {
@@ -710,12 +834,11 @@ describe("downloadFile - round-trip integration", () => {
       path: fileInfo.path,
       size: fileInfo.size,
       contentHash: fileInfo.contentHash,
-      manifestKey: manifest.manifestKey,
       chunks: fileInfo.chunks,
     };
 
     const downloaded = await collectBytes(
-      downloadFile(ref, undefined, ipfsClient),
+      downloadFile(ref, { manifestKey }, ipfsClient),
     );
 
     expect(new TextDecoder().decode(downloaded)).toBe(content);
@@ -752,12 +875,11 @@ describe("downloadFile - round-trip integration", () => {
         path: fileInfo.path,
         size: fileInfo.size,
         contentHash: fileInfo.contentHash,
-        manifestKey: manifest.manifestKey,
         chunks: fileInfo.chunks,
       };
 
       const downloaded = await collectBytes(
-        downloadFile(ref, undefined, ipfsClient),
+        downloadFile(ref, { manifestKey }, ipfsClient),
       );
       const expectedContent = `Content ${i + 1}`;
       expect(new TextDecoder().decode(downloaded)).toBe(expectedContent);
@@ -793,11 +915,10 @@ describe("downloadFile - round-trip integration", () => {
       path: emptyFile.path,
       size: emptyFile.size,
       contentHash: emptyFile.contentHash,
-      manifestKey: manifest.manifestKey,
       chunks: emptyFile.chunks,
     };
     const emptyDownloaded = await collectBytes(
-      downloadFile(emptyRef, undefined, ipfsClient),
+      downloadFile(emptyRef, { manifestKey }, ipfsClient),
     );
     expect(emptyDownloaded.length).toBe(0);
 
@@ -810,11 +931,10 @@ describe("downloadFile - round-trip integration", () => {
       path: nonEmptyFile.path,
       size: nonEmptyFile.size,
       contentHash: nonEmptyFile.contentHash,
-      manifestKey: manifest.manifestKey,
       chunks: nonEmptyFile.chunks,
     };
     const nonEmptyDownloaded = await collectBytes(
-      downloadFile(nonEmptyRef, undefined, ipfsClient),
+      downloadFile(nonEmptyRef, { manifestKey }, ipfsClient),
     );
     expect(new TextDecoder().decode(nonEmptyDownloaded)).toBe("Not empty");
   });

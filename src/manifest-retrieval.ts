@@ -4,16 +4,16 @@
  * Implements getManifest() for fetching and decrypting batch manifests from IPFS.
  */
 
-import { decrypt, type Nonce, type SymmetricKey } from "@0xd49daa/safecrypt";
+import type { SymmetricKey } from "@0xd49daa/safecrypt";
 
-import { MANIFEST_DOMAIN, NONCE_SIZE } from "./constants.ts";
 import { ManifestError, ValidationError } from "./errors.ts";
-import { VAULT_AES_256_KEY_SIZE } from "./vault-aead.ts";
 import {
-  decodeManifestEnvelope,
-  decodeRootManifest,
-  decodeSubManifest,
-} from "./serialization.ts";
+  decryptVaultManifestRecord,
+  VAULT_AES_256_KEY_SIZE,
+  VAULT_BATCH_ID_SIZE,
+} from "./vault-aead.ts";
+import { decodeRootManifest, decodeSubManifest } from "./serialization.ts";
+import { unpadManifestPlaintext } from "./manifest-padding.ts";
 import type { IpfsClient } from "./ipfs-client.ts";
 import type { BatchManifest, FileInfo, GetManifestOptions } from "./types.ts";
 
@@ -59,43 +59,46 @@ async function collectBytes(
 }
 
 /**
- * Decrypt encrypted manifest bytes using the manifest key.
- * Handles nonce extraction from combined format: nonce (24 bytes) || ciphertext.
+ * Parse the plaintext batch_id locator prefix from a root manifest IPFS blob.
  *
- * @param encryptedManifest - Combined nonce + ciphertext bytes
- * @param manifestKey - Symmetric key for decryption
- * @param domain - Domain context (ROOT or SUB)
- * @param batchCid - Batch CID for error context
- * @returns Decrypted plaintext bytes
- * @throws ManifestError if decryption fails
+ * This is intentionally a pure parser: it performs no crypto and does not
+ * validate that the remaining bytes decrypt successfully.
  */
-async function decryptManifestBytes(
-  encryptedManifest: Uint8Array,
-  manifestKey: SymmetricKey,
-  domain: string,
-  batchCid: string,
-): Promise<Uint8Array> {
-  if (encryptedManifest.length < NONCE_SIZE) {
-    throw new ManifestError(
-      batchCid,
-      `Encrypted manifest too short: expected at least ${NONCE_SIZE} bytes, got ${encryptedManifest.length}`,
+export function getBatchIdFromManifestBlob(blob: Uint8Array): Uint8Array {
+  if (blob.length < VAULT_BATCH_ID_SIZE) {
+    throw new ValidationError(
+      `Root manifest blob too short: expected at least ${VAULT_BATCH_ID_SIZE} bytes, got ${blob.length}`,
     );
   }
 
-  // Cast to Nonce - we've validated the length above
-  const nonce = encryptedManifest.slice(0, NONCE_SIZE) as Nonce;
-  const ciphertext = encryptedManifest.slice(NONCE_SIZE);
-  const context = new TextEncoder().encode(domain);
+  return blob.slice(0, VAULT_BATCH_ID_SIZE);
+}
 
+/**
+ * Decrypt a Vault manifest AEAD record using the manifest key and batch_id AAD.
+ */
+async function decryptManifestRecord(
+  record: Uint8Array,
+  manifestKey: SymmetricKey,
+  batchId: Uint8Array,
+  manifestNodeId: number,
+  batchCid: string,
+  label: string,
+): Promise<Uint8Array> {
   try {
-    return await decrypt(ciphertext, nonce, manifestKey, context);
+    return await decryptVaultManifestRecord({
+      record,
+      manifestKey,
+      batchId,
+      manifestNodeId,
+    });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to decrypt manifest: ${
+      `Failed to decrypt ${label}: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -116,6 +119,8 @@ async function fetchAndDecryptSubManifest(
   batchCid: string,
   manifestId: string,
   manifestKey: SymmetricKey,
+  batchId: Uint8Array,
+  manifestNodeId: number,
   ipfsClient: IpfsClient,
   signal?: AbortSignal,
 ): Promise<FileInfo[]> {
@@ -140,14 +145,17 @@ async function fetchAndDecryptSubManifest(
     );
   }
 
-  // Decrypt with SUB domain context
+  // Decrypt as a pure Vault AEAD record. Sub-manifests use sequential
+  // manifest_node_id values starting at 1.
   let decryptedBytes: Uint8Array;
   try {
-    decryptedBytes = await decryptManifestBytes(
+    decryptedBytes = await decryptManifestRecord(
       encryptedBytes,
       manifestKey,
-      MANIFEST_DOMAIN.SUB,
+      batchId,
+      manifestNodeId,
       batchCid,
+      `sub-manifest ${manifestId}`,
     );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -167,7 +175,7 @@ async function fetchAndDecryptSubManifest(
 
   // Parse sub-manifest
   try {
-    const subManifest = decodeSubManifest(decryptedBytes);
+    const subManifest = decodeSubManifest(unpadManifestPlaintext(decryptedBytes));
     return subManifest.files;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -189,7 +197,7 @@ async function fetchAndDecryptSubManifest(
  * @param options - Retrieval options including keys and IPFS client
  * @returns Decrypted BatchManifest with all files and directories
  * @throws ValidationError - Empty batchCid
- * @throws ManifestError - Manifest parsing, decryption, or recipient mismatch
+ * @throws ManifestError - Manifest parsing or decryption failure
  * @throws IpfsFetchError - IPFS retrieval failures (wrapped in ManifestError)
  */
 export async function getManifest(
@@ -233,34 +241,37 @@ export async function getManifest(
     );
   }
 
-  // 4. Parse envelope
-  let envelope;
+  // 4. Parse plaintext batch_id locator prefix and root AEAD record
+  let batchId: Uint8Array;
   try {
-    envelope = decodeManifestEnvelope(envelopeBytes);
+    batchId = getBatchIdFromManifestBlob(envelopeBytes);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
     throw new ManifestError(
       batchCid,
-      `Failed to parse manifest envelope: ${
+      `Failed to parse manifest batch_id prefix: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
   }
+  const encryptedRootRecord = envelopeBytes.slice(VAULT_BATCH_ID_SIZE);
 
   // 5. Decrypt root manifest
-  const decryptedRootBytes = await decryptManifestBytes(
-    envelope.encryptedManifest,
+  const decryptedRootBytes = await decryptManifestRecord(
+    encryptedRootRecord,
     manifestKey,
-    MANIFEST_DOMAIN.ROOT,
+    batchId,
+    0,
     batchCid,
+    "root manifest",
   );
 
   // 6. Parse root manifest
   let rootManifest;
   try {
-    rootManifest = decodeRootManifest(decryptedRootBytes);
+    rootManifest = decodeRootManifest(unpadManifestPlaintext(decryptedRootBytes));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
@@ -279,11 +290,14 @@ export async function getManifest(
   // 8. Fetch sub-manifests (if any)
   const allFiles: FileInfo[] = [...rootManifest.files];
 
-  for (const subManifestEntry of rootManifest.subManifests) {
+  for (let i = 0; i < rootManifest.subManifests.length; i++) {
+    const subManifestEntry = rootManifest.subManifests[i]!;
     const subManifestFiles = await fetchAndDecryptSubManifest(
       batchCid,
       subManifestEntry.manifestId,
       manifestKey,
+      batchId,
+      i + 1,
       ipfsClient,
       signal,
     );
@@ -294,7 +308,6 @@ export async function getManifest(
   return {
     cid: batchCid,
     manifestVersion: rootManifest.manifestVersion,
-    manifestKey,
     directories: rootManifest.directories,
     files: allFiles,
     created: rootManifest.created,

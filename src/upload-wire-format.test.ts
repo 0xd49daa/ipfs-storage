@@ -10,15 +10,20 @@ import {
 import { asAsyncIterable } from "./async-iterable.ts";
 import { MockIpfsClient } from "./ipfs-client.ts";
 import { uploadBatch } from "./streaming-upload.ts";
+import { CHUNK_SIZE } from "./constants.ts";
+import { padme } from "./padme.ts";
 import type { StreamingFileInput } from "./types.ts";
 import {
   VAULT_AEAD_VERSION,
+  VAULT_AEAD_NONCE_SIZE,
+  VAULT_AEAD_TAG_SIZE,
   VAULT_BATCH_ID_SIZE,
   VAULT_KEY_SCOPE_CHUNK,
   VAULT_KEY_SCOPE_MANIFEST,
 } from "./vault-aead.ts";
 
 const manifestKey = new Uint8Array(32).fill(0x11) as SymmetricKey;
+const VAULT_RECORD_OVERHEAD = 2 + VAULT_AEAD_NONCE_SIZE + VAULT_AEAD_TAG_SIZE;
 
 beforeAll(async () => {
   await preloadSodium();
@@ -100,6 +105,7 @@ describe("Phase 3 upload wire format", () => {
     );
 
     const rootBlob = await collectBytes(ipfsClient.cat(result.cid, "/m"));
+    expect(rootBlob.slice(0, VAULT_BATCH_ID_SIZE)).toHaveLength(16);
     expect(rootBlob.slice(0, VAULT_BATCH_ID_SIZE)).toEqual(batch_id);
     expect(rootBlob[VAULT_BATCH_ID_SIZE]).toBe(VAULT_AEAD_VERSION);
     expect(rootBlob[VAULT_BATCH_ID_SIZE + 1]).toBe(
@@ -110,6 +116,41 @@ describe("Phase 3 upload wire format", () => {
     const chunkBytes = ipfsClient.getBlock(chunkRef.cid)!;
     expect(chunkBytes[0]).toBe(VAULT_AEAD_VERSION);
     expect(chunkBytes[1]).toBe(VAULT_KEY_SCOPE_CHUNK);
+  });
+
+  test("PADME-pads chunk plaintext before encryption", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const data = rangeBytes(123, 0x40);
+    const file = await createFileInput(data, "/padded-chunk.bin");
+
+    const result = await uploadBatch(
+      asAsyncIterable([file]),
+      { manifestKey, batch_id: rangeBytes(VAULT_BATCH_ID_SIZE, 0x90) },
+      ipfsClient,
+    );
+
+    const chunkRef = result.manifest.files[0]!.chunks[0]!;
+    expect(chunkRef.length).toBe(data.length);
+    expect(chunkRef.encryptedLength).toBe(
+      VAULT_RECORD_OVERHEAD + padme(data.length),
+    );
+  });
+
+  test("PADME-pads large-file final chunk plaintext", async () => {
+    const ipfsClient = new MockIpfsClient();
+    const data = rangeBytes(CHUNK_SIZE + 123, 0x50);
+    const file = await createFileInput(data, "/large-padded.bin");
+
+    const result = await uploadBatch(
+      asAsyncIterable([file]),
+      { manifestKey, batch_id: rangeBytes(VAULT_BATCH_ID_SIZE, 0x91) },
+      ipfsClient,
+    );
+
+    const chunks = result.manifest.files[0]!.chunks;
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]!.length).toBe(123);
+    expect(chunks[1]!.encryptedLength).toBe(VAULT_RECORD_OVERHEAD + padme(123));
   });
 
   test("sub-manifest blobs are pure manifest AEAD records", async () => {

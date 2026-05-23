@@ -114,8 +114,6 @@ export interface BatchManifest {
   cid: string;
   /** Manifest schema version */
   manifestVersion: number;
-  /** Manifest encryption key */
-  manifestKey: SymmetricKey;
   /** All directories in the batch */
   directories: DirectoryInfo[];
   /** All files in the batch */
@@ -324,8 +322,6 @@ export interface FileDownloadRef {
   size: number;
   /** BLAKE2b content hash for key derivation and verification */
   contentHash: ContentHash;
-  /** Manifest key for deriving file encryption key */
-  manifestKey: SymmetricKey;
   /** Chunk references for this file */
   chunks: ChunkRef[];
 }
@@ -335,6 +331,8 @@ export interface FileDownloadRef {
  * Matches spec exactly - ipfsClient is passed as separate param to downloadFile().
  */
 export interface DownloadOptions {
+  /** Caller-derived symmetric manifest key (32 bytes) */
+  manifestKey: SymmetricKey;
   /** Retry attempts per chunk (default: 3) */
   retries?: number;
   /** Parallel chunk fetch concurrency (default: 3) */
@@ -347,6 +345,8 @@ export interface DownloadOptions {
   integrityMode?: "strict" | "warn";
   /** Callback for integrity errors in 'warn' mode */
   onIntegrityError?: (error: import("./errors.ts").IntegrityError) => void;
+  /** Caller-owned stream sink for decrypted bytes. No plaintext files/caches are created. */
+  output?: WritableStream<Uint8Array>;
 }
 
 /**
@@ -372,6 +372,8 @@ export interface DownloadProgress {
  * Options for multi-file download.
  */
 export interface DownloadFilesOptions {
+  /** Caller-derived symmetric manifest key (32 bytes) */
+  manifestKey: SymmetricKey;
   /**
    * @deprecated Ignored. Downloads are sequential to bound memory usage.
    * Chunk-level parallelism (chunkConcurrency) is still supported.
@@ -504,7 +506,11 @@ export interface IpfsStorageModule {
    */
   downloadFile(
     file: FileDownloadRef,
-    options?: DownloadOptions,
+    options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  ): Promise<void>;
+  downloadFile(
+    file: FileDownloadRef,
+    options: DownloadOptions,
   ): AsyncIterable<Uint8Array>;
 
   /**
@@ -515,6 +521,6 @@ export interface IpfsStorageModule {
    */
   downloadFiles(
     files: FileDownloadRef[],
-    options?: DownloadFilesOptions,
+    options: DownloadFilesOptions,
   ): AsyncIterable<DownloadedFile>;
 }

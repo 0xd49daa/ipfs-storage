@@ -5,7 +5,6 @@
  * streaming integrity verification, and retry logic.
  */
 
-import type { SymmetricKey } from "@0xd49daa/safecrypt";
 import {
   constantTimeEqual,
   createBlake2bHasher,
@@ -13,17 +12,20 @@ import {
 } from "@0xd49daa/safecrypt";
 import type { IpfsClient } from "./ipfs-client.ts";
 import type { ChunkRef, DownloadOptions, FileDownloadRef } from "./types.ts";
-import { ChunkEncryption } from "./gen/manifest_pb.ts";
-import { deriveFileKey } from "./crypto.ts";
-import { decryptSingleShot, decryptStreaming } from "./chunk-encrypt.ts";
 import { chunkIdToPath } from "./chunk-id.ts";
 import { unsafe } from "./branded.ts";
 import {
   ChunkUnavailableError,
   IntegrityError,
+  ManifestError,
   ValidationError,
 } from "./errors.ts";
 import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
+import { getBatchIdFromManifestBlob } from "./manifest-retrieval.ts";
+import {
+  decryptVaultChunkRecord,
+  VAULT_AES_256_KEY_SIZE,
+} from "./vault-aead.ts";
 
 // ============================================================================
 // Helper Functions
@@ -84,8 +86,22 @@ function validateDownloadRef(ref: FileDownloadRef): void {
   if (!ref.contentHash || ref.contentHash.length !== 32) {
     throw new ValidationError("contentHash must be a 32-byte Uint8Array");
   }
-  if (!ref.manifestKey || ref.manifestKey.length !== 32) {
-    throw new ValidationError("manifestKey must be a 32-byte Uint8Array");
+}
+
+/**
+ * Validate caller-supplied download options.
+ */
+function validateDownloadOptions(options: DownloadOptions | undefined): void {
+  if (!options || typeof options !== "object") {
+    throw new ValidationError("options must be an object");
+  }
+  if (!options.manifestKey) {
+    throw new ValidationError("manifestKey is required");
+  }
+  if (options.manifestKey.length !== VAULT_AES_256_KEY_SIZE) {
+    throw new ValidationError(
+      `manifestKey must be ${VAULT_AES_256_KEY_SIZE} bytes, got ${options.manifestKey.length}`,
+    );
   }
 }
 
@@ -124,12 +140,42 @@ async function fetchChunk(
 }
 
 /**
+ * Fetch the root manifest blob and parse its plaintext batch_id locator.
+ */
+async function fetchBatchId(
+  batchCid: string,
+  ipfsClient: IpfsClient,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  try {
+    const rootManifestBlob = await collectBytes(
+      ipfsClient.cat(batchCid, "/m"),
+      signal,
+    );
+    return getBatchIdFromManifestBlob(rootManifestBlob);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new ManifestError(
+      batchCid,
+      `Failed to read manifest batch_id prefix: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+/**
  * Fetch and decrypt a single chunk segment.
  */
 async function fetchAndDecryptChunk(
   batchCid: string,
   chunkRef: ChunkRef,
-  fileKey: SymmetricKey,
+  manifestKey: Uint8Array,
+  batchId: Uint8Array,
+  filePathWithinBatch: string,
+  chunkIndex: number,
   ipfsClient: IpfsClient,
   maxRetries: number,
   signal?: AbortSignal,
@@ -149,13 +195,13 @@ async function fetchAndDecryptChunk(
     chunkRef.offset + chunkRef.encryptedLength,
   );
 
-  // Decrypt based on encryption mode
-  let plaintext: Uint8Array;
-  if (chunkRef.encryption === ChunkEncryption.SINGLE_SHOT) {
-    plaintext = await decryptSingleShot(segmentBytes, fileKey);
-  } else {
-    plaintext = await decryptStreaming(segmentBytes, fileKey);
-  }
+  const plaintext = await decryptVaultChunkRecord({
+    record: segmentBytes,
+    manifestKey,
+    batchId,
+    filePathWithinBatch,
+    chunkIndex,
+  });
 
   // Trim PADME padding (return original plaintext length only)
   return plaintext.slice(0, chunkRef.length);
@@ -177,37 +223,40 @@ interface ChunkResult {
  * Download and decrypt a single file from IPFS.
  *
  * Follows the same pattern as uploadBatch(files, options, ipfsClient).
- * Phase 17 module factory will bind ipfsClient and expose spec-compliant
- * downloadFile(file, options?) signature.
+ * Phase 17 module factory binds ipfsClient and exposes the public method.
  *
  * @param ref - File download reference with chunk info
- * @param options - Download options (can be undefined, all fields have defaults)
+ * @param options - Download options including caller-supplied manifestKey
  * @param ipfsClient - IPFS client for content retrieval
  * @returns AsyncIterable yielding decrypted plaintext chunks
  * @throws ValidationError - Invalid ref (empty batchCid, negative size, etc.)
  * @throws ChunkUnavailableError - Chunk fetch failed after retries
  * @throws IntegrityError - Content hash mismatch (strict mode only)
  */
-export async function* downloadFile(
+async function* downloadFileIterable(
   ref: FileDownloadRef,
-  options: DownloadOptions | undefined,
+  options: DownloadOptions,
   ipfsClient: IpfsClient,
 ): AsyncIterable<Uint8Array> {
-  // Extract options with defaults
-  const {
-    retries = DEFAULT_RETRIES,
-    chunkConcurrency = DEFAULT_CHUNK_CONCURRENCY,
-    signal,
-    onProgress,
-    integrityMode = "strict",
-    onIntegrityError,
-  } = options ?? {};
+  const signal = options?.signal;
 
   // Check abort before starting
   checkAbort(signal);
 
   // Validate inputs
   validateDownloadRef(ref);
+  validateDownloadOptions(options);
+
+  // Extract options with defaults
+  const {
+    manifestKey,
+    retries = DEFAULT_RETRIES,
+    chunkConcurrency = DEFAULT_CHUNK_CONCURRENCY,
+    onProgress,
+    integrityMode = "strict",
+    onIntegrityError,
+  } = options;
+
   if (chunkConcurrency < 1) {
     throw new ValidationError("chunkConcurrency must be at least 1");
   }
@@ -235,8 +284,7 @@ export async function* downloadFile(
     return; // Yield nothing for empty file
   }
 
-  // Derive file encryption key
-  const fileKey = await deriveFileKey(ref.manifestKey, ref.contentHash);
+  const batchId = await fetchBatchId(ref.batchCid, ipfsClient, signal);
 
   // Create streaming hasher for incremental integrity verification
   const hasher = await createBlake2bHasher();
@@ -264,7 +312,10 @@ export async function* downloadFile(
     const promise = fetchAndDecryptChunk(
       ref.batchCid,
       chunkRef,
-      fileKey,
+      manifestKey,
+      batchId,
+      ref.path,
+      chunkIndex,
       ipfsClient,
       retries,
       signal,
@@ -359,4 +410,40 @@ export async function* downloadFile(
     }
     onIntegrityError?.(error);
   }
+}
+
+async function writeDownloadToStream(
+  iterable: AsyncIterable<Uint8Array>,
+  output: WritableStream<Uint8Array>,
+): Promise<void> {
+  const writer = output.getWriter();
+  try {
+    for await (const chunk of iterable) {
+      await writer.write(chunk);
+    }
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+export function downloadFile(
+  ref: FileDownloadRef,
+  options: DownloadOptions & { output: WritableStream<Uint8Array> },
+  ipfsClient: IpfsClient,
+): Promise<void>;
+export function downloadFile(
+  ref: FileDownloadRef,
+  options: DownloadOptions,
+  ipfsClient: IpfsClient,
+): AsyncIterable<Uint8Array>;
+export function downloadFile(
+  ref: FileDownloadRef,
+  options: DownloadOptions,
+  ipfsClient: IpfsClient,
+): AsyncIterable<Uint8Array> | Promise<void> {
+  const iterable = downloadFileIterable(ref, options, ipfsClient);
+  if (options.output) {
+    return writeDownloadToStream(iterable, options.output);
+  }
+  return iterable;
 }

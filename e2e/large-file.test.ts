@@ -20,7 +20,6 @@ function buildFileRef(manifest: BatchManifest, path: string): FileDownloadRef {
     path: fileInfo.path,
     size: fileInfo.size,
     contentHash: fileInfo.contentHash,
-    manifestKey: manifest.manifestKey,
     chunks: fileInfo.chunks,
   };
 }
@@ -62,7 +61,9 @@ describe("E2E Large File Upload", () => {
     const downloadRef = buildFileRef(manifest, "/large.bin");
 
     const chunks: Uint8Array[] = [];
-    for await (const chunk of module.downloadFile(downloadRef)) {
+    for await (
+      const chunk of module.downloadFile(downloadRef, { manifestKey })
+    ) {
       chunks.push(chunk);
     }
 
@@ -82,5 +83,42 @@ describe("E2E Large File Upload", () => {
     expect(downloaded[Math.floor(size / 2)]).toBe(
       content[Math.floor(size / 2)],
     );
+  });
+
+  test("downloads over 100 MiB to a WritableStream without collecting output", async () => {
+    const size = 101 * 1024 * 1024;
+    const content = new Uint8Array(size);
+    for (let i = 0; i < content.length; i++) {
+      content[i] = i % 251;
+    }
+
+    const file = await createStreamingFileInput(content, "/huge.bin");
+    const manifestKey = createTestManifestKey(11);
+    const batch_id = createTestBatchId(11);
+
+    const result = await module.uploadBatch(asAsyncIterable([file]), {
+      manifestKey,
+      batch_id,
+    });
+    const manifest = await module.getManifest(result.cid, { manifestKey });
+    const downloadRef = buildFileRef(manifest, "/huge.bin");
+
+    let bytesWritten = 0;
+    const output = new WritableStream<Uint8Array>({
+      write(chunk) {
+        for (let i = 0; i < chunk.length; i++) {
+          expect(chunk[i]).toBe((bytesWritten + i) % 251);
+        }
+        bytesWritten += chunk.length;
+      },
+    });
+
+    await module.downloadFile(downloadRef, {
+      manifestKey,
+      chunkConcurrency: 1,
+      output,
+    });
+
+    expect(bytesWritten).toBe(size);
   });
 });

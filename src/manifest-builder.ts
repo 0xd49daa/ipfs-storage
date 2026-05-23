@@ -9,6 +9,7 @@ import type { SymmetricKey } from "@0xd49daa/safecrypt";
 import { MANIFEST_VERSION_SUPPORTED, SUB_MANIFEST_SIZE } from "./constants.ts";
 import { ValidationError } from "./errors.ts";
 import { encodeRootManifest, encodeSubManifest } from "./serialization.ts";
+import { padManifestPlaintext } from "./manifest-padding.ts";
 import { encryptVaultManifestRecord } from "./vault-aead.ts";
 import type {
   DirectoryInfo,
@@ -285,7 +286,7 @@ export async function encryptManifest(
   const { manifest, manifestKey, batchId } = input;
 
   const encryptedRoot = await encryptVaultManifestRecord({
-    plaintext: manifest.rootManifest,
+    plaintext: padManifestPlaintext(manifest.rootManifest),
     manifestKey,
     batchId,
     manifestNodeId: 0,
@@ -294,7 +295,7 @@ export async function encryptManifest(
   const encryptedSubManifests = await Promise.all(
     manifest.subManifests.map((subManifest, index) => {
       return encryptVaultManifestRecord({
-        plaintext: subManifest,
+        plaintext: padManifestPlaintext(subManifest),
         manifestKey,
         batchId,
         manifestNodeId: index + 1,

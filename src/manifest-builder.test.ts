@@ -7,6 +7,8 @@ import {
   sortFilesByPath,
 } from "./manifest-builder.ts";
 import { decodeRootManifest, decodeSubManifest } from "./serialization.ts";
+import { unpadManifestPlaintext } from "./manifest-padding.ts";
+import { padme } from "./padme.ts";
 import { ChunkEncryption } from "./types.ts";
 import type { DirectoryInfo, FileInfo } from "./types.ts";
 import { SUB_MANIFEST_SIZE } from "./constants.ts";
@@ -75,6 +77,15 @@ function rootRecordFromBlob(blob: Uint8Array): Uint8Array {
 
 // Helper to decrypt Vault manifest AEAD records.
 async function decryptManifestBytes(
+  record: Uint8Array,
+  key: SymmetricKey,
+  manifestNodeId: number,
+): Promise<Uint8Array> {
+  const padded = await decryptPaddedManifestBytes(record, key, manifestNodeId);
+  return unpadManifestPlaintext(padded);
+}
+
+async function decryptPaddedManifestBytes(
   record: Uint8Array,
   key: SymmetricKey,
   manifestNodeId: number,
@@ -487,6 +498,25 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
       expect(decoded.files[0]!.path).toBe("/test.txt");
     });
 
+    test("PADME-pads root manifest plaintext before encryption", async () => {
+      const manifestKey = await generateKey();
+      const manifest = buildManifest({
+        files: [await makeFileInfo("/padding-root.txt")],
+        directories: [],
+        created: 1700000000000,
+      });
+
+      const result = await encryptManifest({ manifest, manifestKey, batchId });
+      const padded = await decryptPaddedManifestBytes(
+        rootRecordFromBlob(result.envelope),
+        manifestKey,
+        0,
+      );
+
+      expect(padded.length).toBe(padme(4 + manifest.rootManifest.length));
+      expect(unpadManifestPlaintext(padded)).toEqual(manifest.rootManifest);
+    });
+
     test("sub-manifests encrypted with sequential manifest node ids", async () => {
       const manifestKey = await generateKey();
 
@@ -532,6 +562,33 @@ describe("Phase 9: Manifest Construction & Encryption", () => {
       expect(root.subManifests.length).toBe(
         result.encryptedSubManifests.length,
       );
+    });
+
+    test("PADME-pads sub-manifest plaintext before encryption", async () => {
+      const manifestKey = await generateKey();
+      const files: FileInfo[] = [];
+      for (let i = 0; i < 60; i++) {
+        files.push(await makeFileInfo(`/padding-sub-${i}.txt`));
+      }
+      const manifest = buildManifest({
+        files,
+        directories: [],
+        created: 1700000000000,
+        options: { maxSubManifestSize: 2 * 1024 },
+      });
+
+      const result = await encryptManifest({ manifest, manifestKey, batchId });
+      expect(result.encryptedSubManifests.length).toBeGreaterThan(0);
+
+      for (let i = 0; i < result.encryptedSubManifests.length; i++) {
+        const padded = await decryptPaddedManifestBytes(
+          result.encryptedSubManifests[i]!,
+          manifestKey,
+          i + 1,
+        );
+        expect(padded.length).toBe(padme(4 + manifest.subManifests[i]!.length));
+        expect(unpadManifestPlaintext(padded)).toEqual(manifest.subManifests[i]);
+      }
     });
 
     test("uses provided manifest key", async () => {
