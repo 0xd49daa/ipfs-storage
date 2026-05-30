@@ -7,7 +7,6 @@ import {
   type SymmetricKey,
 } from "../src/crypto-primitives.ts";
 import { CarBufferReader } from "@ipld/car";
-import * as raw from "multiformats/codecs/raw";
 import * as dagPb from "@ipld/dag-pb";
 import type { StreamingFileInput } from "../src/types.ts";
 import {
@@ -87,7 +86,7 @@ export class HttpIpfsClient implements IpfsClient {
         if (json.Root && json.Root.Cid) {
           return json.Root.Cid["/"] || json.Root.Cid;
         }
-      } catch (e) {
+      } catch {
         console.warn("Failed to parse dag/import response line:", line);
       }
     }
@@ -96,14 +95,11 @@ export class HttpIpfsClient implements IpfsClient {
   }
 
   async *cat(cid: string, path?: string): AsyncIterable<Uint8Array> {
-    // Construct full path: /api/v0/cat?arg=<cid>/<path>
     const fullPath = path ? `${cid}/${path.replace(/^\/+/, "")}` : cid;
     const url = `${this.apiUrl}/api/v0/cat?arg=${encodeURIComponent(fullPath)}`;
 
-    const res = await fetch(url, { method: "POST" }); // Kubo RPC uses POST often, but GET works for cat usually. POST is safer for RPC.
-
+    const res = await fetch(url, { method: "POST" });
     if (!res.ok) {
-      // If 404/500, treat as fetch error
       const text = await res.text();
       throw new IpfsFetchError(
         cid,
@@ -114,7 +110,6 @@ export class HttpIpfsClient implements IpfsClient {
 
     if (!res.body) throw new IpfsFetchError(cid, "No response body", path);
 
-    // Stream the body
     const reader = res.body.getReader();
     try {
       while (true) {
@@ -128,7 +123,6 @@ export class HttpIpfsClient implements IpfsClient {
   }
 
   async has(cid: string): Promise<boolean> {
-    // Use /api/v0/block/stat to check existence cheaply
     const url = `${this.apiUrl}/api/v0/block/stat?arg=${
       encodeURIComponent(cid)
     }`;

@@ -14,6 +14,8 @@ never performs recipient key wrapping.
 - **Vault v0.34 wire format** — Chunks and manifests are encoded as canonical
   AES-GCM AEAD records with Vault-compatible AAD.
 - **Streaming upload and download** — Handles large files with bounded memory.
+- **Kubo RPC client adapter** — Connects the package `IpfsClient` contract to
+  the official `kubo-rpc-client` package for local Kubo RPC uploads.
 - **Protocol Buffers** — Compact manifest encoding with explicit manifest
   version support.
 - **PADME padding** — Pads chunk and manifest plaintext before encryption.
@@ -87,10 +89,33 @@ for await (const chunk of storage.downloadFile(fileRef, { manifestKey })) {
 | `module.getManifest(cid, options)`    | Retrieve and decrypt the manifest using `manifestKey`             |
 | `module.downloadFile(ref, options)`   | Download and decrypt one file as stream, memory, or sink          |
 | `module.downloadFiles(refs, options)` | Download and decrypt multiple files sequentially                  |
+| `new KuboRpcClient(options?)`         | Use a local Kubo RPC endpoint as the package `IpfsClient`         |
 | `getBatchIdFromManifestBlob(blob)`    | Parse the plaintext `batch_id` prefix from a root manifest blob   |
 | `hashContent(bytes)`                  | Compute the content hash format accepted by this package          |
 
 See [REFERENCE.md](./REFERENCE.md) for complete API documentation.
+
+## Kubo RPC Client
+
+`KuboRpcClient` adapts the official `kubo-rpc-client` package to this package's
+`IpfsClient` interface. It defaults to local Kubo RPC at
+`http://127.0.0.1:5001`.
+
+```typescript
+import { createIpfsStorageModule, KuboRpcClient } from "@0xd49daa/ipfs-storage";
+
+const storage = createIpfsStorageModule({
+  ipfsClient: new KuboRpcClient(),
+});
+```
+
+Browser callers must configure Kubo CORS for the app origin. The Kubo RPC API is
+an admin interface; keep it bound to localhost and do not expose it to the
+public internet.
+
+Rooted CAR uploads are imported with `/api/v0/dag/import`; rootless CAR blocks
+are stored with `/api/v0/block/put`. Returned CIDs are checked against the CAR
+contents and `CidMismatchError` is thrown on mismatch.
 
 ## Symmetric Keys
 
@@ -159,6 +184,8 @@ the caller.
 | `IntegrityError`        | Content hash mismatch on download                                                |
 | `ManifestError`         | Cannot fetch, parse, or decrypt a manifest                                       |
 | `ChunkUnavailableError` | Chunk fetch failed after retries                                                 |
+| `IpfsUploadError`       | Kubo RPC upload or CAR parsing failed                                            |
+| `IpfsFetchError`        | Kubo RPC fetch failed                                                            |
 | `CidMismatchError`      | CID verification failed                                                          |
 
 All errors extend `IpfsStorageError`. See [REFERENCE.md](./REFERENCE.md) for

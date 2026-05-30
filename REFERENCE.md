@@ -18,6 +18,7 @@ upload, manifest retrieval, and download. Upload also requires a 16-byte
 - [Types Reference](#types-reference)
 - [Re-exported Types](#re-exported-types)
 - [IpfsClient Interface](#ipfsclient-interface)
+- [Kubo RPC Client](#kubo-rpc-client)
 
 ---
 
@@ -612,6 +613,8 @@ IpfsStorageError
 ├── ManifestError
 ├── ChunkUnavailableError
 ├── ChunkUploadError
+├── IpfsUploadError
+├── IpfsFetchError
 └── CidMismatchError
 ```
 
@@ -695,6 +698,26 @@ class CidMismatchError extends IpfsStorageError {
 }
 ```
 
+### IpfsUploadError
+
+Thrown when an `IpfsClient` upload fails, including Kubo RPC upload failures and
+invalid CAR input.
+
+```typescript
+class IpfsUploadError extends IpfsStorageError {}
+```
+
+### IpfsFetchError
+
+Thrown when an `IpfsClient` fetch fails.
+
+```typescript
+class IpfsFetchError extends IpfsStorageError {
+  readonly cid: string;
+  readonly path?: string;
+}
+```
+
 ---
 
 ## Types Reference
@@ -763,7 +786,7 @@ Interface for IPFS client implementations.
 
 ```typescript
 interface IpfsClient {
-  uploadCar(car: Uint8Array): Promise<string>;
+  uploadCar(car: AsyncIterable<Uint8Array>): Promise<string>;
   cat(cid: string, path?: string): AsyncIterable<Uint8Array>;
   has(cid: string): Promise<boolean>;
 }
@@ -777,7 +800,7 @@ In-memory mock implementation for tests and examples.
 class MockIpfsClient implements IpfsClient {
   constructor(options?: MockIpfsClientOptions);
 
-  uploadCar(car: Uint8Array): Promise<string>;
+  uploadCar(car: AsyncIterable<Uint8Array>): Promise<string>;
   cat(cid: string, path?: string): AsyncIterable<Uint8Array>;
   has(cid: string): Promise<boolean>;
 
@@ -791,3 +814,35 @@ class MockIpfsClient implements IpfsClient {
   clearUploadLatch(): void;
 }
 ```
+
+---
+
+## Kubo RPC Client
+
+### KuboRpcClient
+
+Browser-compatible adapter around the official `kubo-rpc-client` package.
+
+```typescript
+class KuboRpcClient implements IpfsClient {
+  constructor(options?: KuboRpcClientOptions);
+
+  uploadCar(car: AsyncIterable<Uint8Array>): Promise<string>;
+  cat(cid: string, path?: string): AsyncIterable<Uint8Array>;
+  has(cid: string): Promise<boolean>;
+}
+
+interface KuboRpcClientOptions {
+  baseUrl?: string | URL;
+  headers?: Headers | Record<string, string>;
+  timeout?: number | string;
+}
+```
+
+`baseUrl` defaults to `http://127.0.0.1:5001`. Rooted CARs are uploaded through
+Kubo `/api/v0/dag/import`; rootless CAR blocks are uploaded through
+`/api/v0/block/put`. Returned CIDs are verified against the CAR contents and a
+`CidMismatchError` is thrown if Kubo returns an unexpected CID.
+
+Browser callers must configure Kubo CORS for the application origin. The Kubo
+RPC API is an admin interface and should stay bound to localhost.

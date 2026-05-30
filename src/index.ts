@@ -16,8 +16,14 @@ export { createIpfsStorageModule } from "./module.ts";
 // =============================================================================
 
 export type { IpfsClient } from "./ipfs-client.ts";
-export { MockIpfsClient } from "./ipfs-client.ts";
+export {
+  IpfsFetchError,
+  IpfsUploadError,
+  MockIpfsClient,
+} from "./ipfs-client.ts";
 export type { MockIpfsClientOptions } from "./ipfs-client.ts";
+export { DEFAULT_KUBO_RPC_URL, KuboRpcClient } from "./kubo-rpc-client.ts";
+export type { KuboRpcClientOptions } from "./kubo-rpc-client.ts";
 
 // =============================================================================
 // Configuration & Module Types
