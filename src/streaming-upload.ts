@@ -286,13 +286,11 @@ async function encryptSegment(
   chunkIndex: number,
 ): Promise<{ encrypted: Uint8Array; encryption: ChunkEncryption }> {
   const paddedLength = padme(plaintext.length);
-  const paddedPlaintext = paddedLength === plaintext.length
-    ? plaintext
-    : (() => {
-      const padded = new Uint8Array(paddedLength);
-      padded.set(plaintext, 0);
-      return padded;
-    })();
+  const paddedPlaintext = paddedLength === plaintext.length ? plaintext : (() => {
+    const padded = new Uint8Array(paddedLength);
+    padded.set(plaintext, 0);
+    return padded;
+  })();
 
   const encrypted = await encryptVaultChunkRecord({
     plaintext: paddedPlaintext,
@@ -1301,9 +1299,7 @@ export async function uploadBatch(
         updateChunkRefsForFlushedChunk(flushedChunk);
 
         // File was part of flushed chunk
-        const segInfo = flushedChunk.segments.find((s) =>
-          s.fileIndex === fileIndex
-        );
+        const segInfo = flushedChunk.segments.find((s) => s.fileIndex === fileIndex);
         if (segInfo) {
           chunkRefs.push({
             chunkId: flushedChunk.chunkId,

@@ -2,21 +2,19 @@
 
 ## 0.2.0
 
-Version `0.2.0` documents the package as a symmetric-only Vault v0.34 storage
-module. The previously documented asymmetric recipient model is removed from the
-public documentation and should not be used by consumers.
+Version `0.2.0` documents the package as a symmetric-only Vault v0.34 storage module. The previously
+documented asymmetric recipient model is removed from the public documentation and should not be
+used by consumers.
 
 ### Breaking Changes
 
-- `uploadBatch()` requires `manifestKey: SymmetricKey` and
-  `batch_id: Uint8Array`.
+- `uploadBatch()` requires `manifestKey: SymmetricKey` and `batch_id: Uint8Array`.
 - `batch_id` must be exactly 16 bytes and should be random per batch.
 - `manifestKey` must be exactly 32 bytes and is owned by the caller.
 - `getManifest()` requires `manifestKey` instead of recipient key material.
 - `downloadFile()` and `downloadFiles()` require `manifestKey` in options.
 - `BatchManifest` does not expose `manifestKey` or sender public key fields.
-- `FileDownloadRef` does not carry `manifestKey`; pass it through download
-  options instead.
+- `FileDownloadRef` does not carry `manifestKey`; pass it through download options instead.
 - Asymmetric sender and recipient options are removed from the documented API.
 - X25519 key types are not re-exported by this package.
 
@@ -78,9 +76,9 @@ await storage.downloadFile(fileRef, {
 
 ### Root Manifest Locator
 
-The root manifest blob at `/m` starts with a plaintext 16-byte `batch_id`
-prefix, followed by the encrypted root manifest AEAD record. Consumers that need
-to read the locator without decrypting the manifest can use:
+The root manifest blob at `/m` starts with a plaintext 16-byte `batch_id` prefix, followed by the
+encrypted root manifest AEAD record. Consumers that need to read the locator without decrypting the
+manifest can use:
 
 ```typescript
 import { getBatchIdFromManifestBlob } from "@0xd49daa/ipfs-storage";
@@ -88,12 +86,10 @@ import { getBatchIdFromManifestBlob } from "@0xd49daa/ipfs-storage";
 const batchId = getBatchIdFromManifestBlob(rootManifestBlob);
 ```
 
-This parser only reads the prefix. It does not authenticate or decrypt the
-remaining bytes.
+This parser only reads the prefix. It does not authenticate or decrypt the remaining bytes.
 
 ### Plaintext Handling
 
-The library still does not write plaintext files, OPFS caches, or temporary
-decrypted files. Downloads yield decrypted bytes to the caller, return an
-in-memory `Uint8Array` when requested, or write them to a caller-owned
-`WritableStream`.
+The library still does not write plaintext files, OPFS caches, or temporary decrypted files.
+Downloads yield decrypted bytes to the caller, return an in-memory `Uint8Array` when requested, or
+write them to a caller-owned `WritableStream`.

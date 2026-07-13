@@ -38,9 +38,7 @@ export class PathManager {
       filePath = asFilePath(path);
     } catch (err) {
       throw new ValidationError(
-        `Invalid file path: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `Invalid file path: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -107,9 +105,7 @@ export function resolveConflicts(files: PathContainer[]): string[] {
       filePath = asFilePath(file.path);
     } catch (err) {
       throw new ValidationError(
-        `Invalid file path: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `Invalid file path: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 

@@ -9,11 +9,7 @@ import { MockIpfsClient } from "./ipfs-client.ts";
 import { ValidationError } from "./errors.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
 import type { IpfsStorageConfig, StreamingFileInput } from "./types.ts";
-import {
-  type ContentHash,
-  hashContent,
-  type SymmetricKey,
-} from "./crypto-primitives.ts";
+import { type ContentHash, hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(1);

@@ -247,9 +247,7 @@ export function buildManifest(input: BuildManifestInput): ManifestBuildResult {
   const { groups, index } = splitFilesIntoGroups(sortedFiles, maxSize);
 
   // Build sub-manifests
-  const subManifests = groups.map((group) =>
-    encodeSubManifest({ files: group })
-  );
+  const subManifests = groups.map((group) => encodeSubManifest({ files: group }));
 
   // Build root manifest (directories only, files are in sub-manifests)
   const rootManifest: RootManifestData = {

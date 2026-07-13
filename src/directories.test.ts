@@ -1,9 +1,6 @@
 import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  buildDirectoryTree,
-  type BuildDirectoryTreeOptions,
-} from "./directories.ts";
+import { buildDirectoryTree, type BuildDirectoryTreeOptions } from "./directories.ts";
 import type { DirectoryInput } from "./types.ts";
 import { ValidationError } from "./errors.ts";
 
@@ -162,12 +159,12 @@ describe("Phase 5: Directory Inference & Validation", () => {
     });
 
     test('throws ValidationError for explicit root "/"', () => {
-      expect(() =>
-        buildDirectoryTree([], [{ path: "/", created: 1600000000000 }])
-      ).toThrow(ValidationError);
-      expect(() =>
-        buildDirectoryTree([], [{ path: "/", created: 1600000000000 }])
-      ).toThrow('Root directory "/" cannot be declared explicitly');
+      expect(() => buildDirectoryTree([], [{ path: "/", created: 1600000000000 }])).toThrow(
+        ValidationError,
+      );
+      expect(() => buildDirectoryTree([], [{ path: "/", created: 1600000000000 }])).toThrow(
+        'Root directory "/" cannot be declared explicitly',
+      );
     });
 
     // === Validation Errors - resolvedPaths ===

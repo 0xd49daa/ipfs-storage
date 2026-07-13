@@ -1,10 +1,6 @@
 import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
-import {
-  asContentHash,
-  hashContent,
-  MANIFEST_VERSION_SUPPORTED,
-} from "./index.ts";
+import { asContentHash, hashContent, MANIFEST_VERSION_SUPPORTED } from "./index.ts";
 
 // @ts-expect-error RecipientInfo is intentionally no longer public.
 import type { RecipientInfo } from "./index.ts";

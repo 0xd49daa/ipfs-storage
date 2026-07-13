@@ -10,11 +10,7 @@
  */
 
 import type { IpfsClient } from "./ipfs-client.ts";
-import type {
-  DownloadedFile,
-  DownloadFilesOptions,
-  FileDownloadRef,
-} from "./types.ts";
+import type { DownloadedFile, DownloadFilesOptions, FileDownloadRef } from "./types.ts";
 import { downloadFile } from "./download.ts";
 import { ValidationError } from "./errors.ts";
 import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
@@ -205,9 +201,7 @@ export async function* downloadFiles(
         totalFiles,
         bytesDownloaded,
         totalBytes,
-        currentFile: fileIndex + 1 < totalFiles
-          ? refs[fileIndex + 1]?.path
-          : undefined,
+        currentFile: fileIndex + 1 < totalFiles ? refs[fileIndex + 1]?.path : undefined,
       });
 
       // Yield the completed file
@@ -228,9 +222,7 @@ export async function* downloadFiles(
           totalFiles,
           bytesDownloaded,
           totalBytes,
-          currentFile: fileIndex + 1 < totalFiles
-            ? refs[fileIndex + 1]?.path
-            : undefined,
+          currentFile: fileIndex + 1 < totalFiles ? refs[fileIndex + 1]?.path : undefined,
         });
       } else {
         // Fail fast - throw immediately

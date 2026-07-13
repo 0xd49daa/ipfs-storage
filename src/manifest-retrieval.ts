@@ -23,9 +23,7 @@ import type { BatchManifest, FileInfo, GetManifestOptions } from "./types.ts";
 function checkAbort(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new DOMException(
-      signal.reason instanceof Error
-        ? signal.reason.message
-        : String(signal.reason ?? "Aborted"),
+      signal.reason instanceof Error ? signal.reason.message : String(signal.reason ?? "Aborted"),
       "AbortError",
     );
   }
@@ -98,9 +96,7 @@ async function decryptManifestRecord(
     }
     throw new ManifestError(
       batchCid,
-      `Failed to decrypt ${label}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Failed to decrypt ${label}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -237,9 +233,7 @@ export async function getManifest(
     }
     throw new ManifestError(
       batchCid,
-      `Failed to fetch manifest: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Failed to fetch manifest: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -282,9 +276,7 @@ export async function getManifest(
     }
     throw new ManifestError(
       batchCid,
-      `Failed to parse root manifest: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Failed to parse root manifest: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 

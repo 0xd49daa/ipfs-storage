@@ -19,11 +19,7 @@ import { downloadFile } from "./download.ts";
 import { uploadBatch } from "./streaming-upload.ts";
 import { getManifest } from "./manifest-retrieval.ts";
 import { asAsyncIterable } from "./async-iterable.ts";
-import {
-  type ContentHash,
-  hashContent,
-  type SymmetricKey,
-} from "./crypto-primitives.ts";
+import { type ContentHash, hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(1);
@@ -106,9 +102,7 @@ async function uploadAndGetRef(
   path: string,
   ipfsClient: MockIpfsClient,
 ): Promise<{ ref: FileDownloadRef; originalContent: Uint8Array }> {
-  const originalContent = typeof content === "string"
-    ? new TextEncoder().encode(content)
-    : content;
+  const originalContent = typeof content === "string" ? new TextEncoder().encode(content) : content;
 
   const file = typeof content === "string"
     ? await createFileInput(content, path)
@@ -970,9 +964,7 @@ describe("downloadFile - round-trip integration", () => {
     expect(emptyDownloaded.length).toBe(0);
 
     // Download non-empty file
-    const nonEmptyFile = manifest.files.find((f) =>
-      f.path === "/notempty.txt"
-    )!;
+    const nonEmptyFile = manifest.files.find((f) => f.path === "/notempty.txt")!;
     const nonEmptyRef: FileDownloadRef = {
       batchCid: manifest.cid,
       path: nonEmptyFile.path,

@@ -2,10 +2,8 @@ declare const brand: unique symbol;
 type Brand<T, B> = T & { readonly [brand]: B };
 
 /** Base58 alphabet (excludes 0, O, I, l to avoid confusion) */
-const BASE58_CHARS =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const BASE58_REGEX =
-  /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
+const BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const BASE58_REGEX = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
 
 /** Base58-encoded chunk identifier (22 chars from UUID) */
 export type ChunkId = Brand<string, "ChunkId">;

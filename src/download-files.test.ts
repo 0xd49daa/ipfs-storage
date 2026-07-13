@@ -6,16 +6,8 @@ import { getManifest } from "./manifest-retrieval.ts";
 import { MockIpfsClient } from "./ipfs-client.ts";
 import { uploadBatch } from "./streaming-upload.ts";
 import { ValidationError } from "./errors.ts";
-import type {
-  FileDownloadRef,
-  MultiDownloadProgress,
-  StreamingFileInput,
-} from "./types.ts";
-import {
-  type ContentHash,
-  hashContent,
-  type SymmetricKey,
-} from "./crypto-primitives.ts";
+import type { FileDownloadRef, MultiDownloadProgress, StreamingFileInput } from "./types.ts";
+import { type ContentHash, hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;
 const batch_id = new Uint8Array(16).fill(2);
@@ -24,9 +16,7 @@ async function createTestFile(
   path: string,
   content: string | Uint8Array,
 ): Promise<StreamingFileInput> {
-  const data = typeof content === "string"
-    ? new TextEncoder().encode(content)
-    : content;
+  const data = typeof content === "string" ? new TextEncoder().encode(content) : content;
   return {
     path,
     contentHash: await hashContent(data),
@@ -215,8 +205,7 @@ describe("downloadFiles", () => {
         chunks: [
           {
             chunkId: "badchunk12345678901234",
-            cid:
-              "bafkreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            cid: "bafkreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             offset: 0,
             length: 10,
             encryption: 0,

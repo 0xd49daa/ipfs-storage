@@ -5,11 +5,7 @@
  * streaming integrity verification, and retry logic.
  */
 
-import {
-  constantTimeEqual,
-  createContentHasher,
-  hashContent,
-} from "./crypto-primitives.ts";
+import { constantTimeEqual, createContentHasher, hashContent } from "./crypto-primitives.ts";
 import type { IpfsClient } from "./ipfs-client.ts";
 import type {
   ChunkRef,
@@ -21,18 +17,10 @@ import type {
 } from "./types.ts";
 import { chunkIdToPath } from "./chunk-id.ts";
 import { unsafe } from "./branded.ts";
-import {
-  ChunkUnavailableError,
-  IntegrityError,
-  ManifestError,
-  ValidationError,
-} from "./errors.ts";
+import { ChunkUnavailableError, IntegrityError, ManifestError, ValidationError } from "./errors.ts";
 import { DEFAULT_CHUNK_CONCURRENCY, DEFAULT_RETRIES } from "./constants.ts";
 import { getBatchIdFromManifestBlob } from "./manifest-retrieval.ts";
-import {
-  decryptVaultChunkRecord,
-  VAULT_AES_256_KEY_SIZE,
-} from "./vault-aead.ts";
+import { decryptVaultChunkRecord, VAULT_AES_256_KEY_SIZE } from "./vault-aead.ts";
 
 // ============================================================================
 // Helper Functions

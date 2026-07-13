@@ -16,11 +16,7 @@ export { createIpfsStorageModule } from "./module.ts";
 // =============================================================================
 
 export type { IpfsClient } from "./ipfs-client.ts";
-export {
-  IpfsFetchError,
-  IpfsUploadError,
-  MockIpfsClient,
-} from "./ipfs-client.ts";
+export { IpfsFetchError, IpfsUploadError, MockIpfsClient } from "./ipfs-client.ts";
 export type { MockIpfsClientOptions } from "./ipfs-client.ts";
 export { DEFAULT_KUBO_RPC_URL, KuboRpcClient } from "./kubo-rpc-client.ts";
 export type { KuboRpcClientOptions } from "./kubo-rpc-client.ts";
@@ -29,11 +25,7 @@ export type { KuboRpcClientOptions } from "./kubo-rpc-client.ts";
 // Configuration & Module Types
 // =============================================================================
 
-export type {
-  IpfsStorageConfig,
-  IpfsStorageModule,
-  ReadOptions,
-} from "./types.ts";
+export type { IpfsStorageConfig, IpfsStorageModule, ReadOptions } from "./types.ts";
 
 // =============================================================================
 // Upload Types
@@ -70,12 +62,7 @@ export { asAsyncIterable } from "./async-iterable.ts";
 // Manifest Types
 // =============================================================================
 
-export type {
-  BatchManifest,
-  ChunkRef,
-  DirectoryInfo,
-  FileInfo,
-} from "./types.ts";
+export type { BatchManifest, ChunkRef, DirectoryInfo, FileInfo } from "./types.ts";
 
 export { ChunkEncryption } from "./types.ts";
 export { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
@@ -118,5 +105,5 @@ export {
 // Content Hash Helpers
 // =============================================================================
 
-export { asContentHash, hashContent } from "./crypto-primitives.ts";
-export type { ContentHash, SymmetricKey } from "./crypto-primitives.ts";
+export { asContentHash, createContentHasher, hashContent } from "./crypto-primitives.ts";
+export type { ContentHash, ContentHasher, SymmetricKey } from "./crypto-primitives.ts";

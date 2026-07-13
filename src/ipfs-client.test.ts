@@ -367,8 +367,7 @@ describe("Phase 2: IpfsClient", () => {
       });
 
       test("handles nested directory paths", async () => {
-        const { carBytes, rootCid, leafData } =
-          await createNestedDirectoryCar();
+        const { carBytes, rootCid, leafData } = await createNestedDirectoryCar();
 
         await client.uploadCar(toAsyncIterable(carBytes));
 
@@ -379,8 +378,7 @@ describe("Phase 2: IpfsClient", () => {
       });
 
       test("throws IpfsFetchError for non-existent CID", async () => {
-        const fakeCid =
-          "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+        const fakeCid = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
 
         await expect(collect(client.cat(fakeCid))).rejects.toThrow(
           IpfsFetchError,
@@ -428,8 +426,7 @@ describe("Phase 2: IpfsClient", () => {
       });
 
       test("returns false for non-existent CID", async () => {
-        const fakeCid =
-          "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+        const fakeCid = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
 
         expect(await client.has(fakeCid)).toBe(false);
       });
@@ -491,8 +488,7 @@ describe("Phase 2: IpfsClient", () => {
       });
 
       test("getBlock() returns undefined for non-existent CID", () => {
-        const fakeCid =
-          "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+        const fakeCid = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
 
         expect(client.getBlock(fakeCid)).toBeUndefined();
       });
@@ -709,11 +705,10 @@ describe("Phase 2: IpfsClient", () => {
         const chunk2 = new TextEncoder().encode("second chunk of data");
         const chunk3 = new TextEncoder().encode("third chunk");
 
-        const { carBytes, rootCid, fileData } =
-          await createUnixFsChunkedFileCar(
-            "chunked.txt",
-            [chunk1, chunk2, chunk3],
-          );
+        const { carBytes, rootCid, fileData } = await createUnixFsChunkedFileCar(
+          "chunked.txt",
+          [chunk1, chunk2, chunk3],
+        );
 
         await client.uploadCar(toAsyncIterable(carBytes));
         const content = await collect(
@@ -724,8 +719,7 @@ describe("Phase 2: IpfsClient", () => {
       });
 
       test("cat() resolves nested path and extracts UnixFS file content", async () => {
-        const { carBytes, rootCid, fileData } =
-          await createNestedUnixFsFileCar();
+        const { carBytes, rootCid, fileData } = await createNestedUnixFsFileCar();
 
         await client.uploadCar(toAsyncIterable(carBytes));
         const content = await collect(

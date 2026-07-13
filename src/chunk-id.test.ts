@@ -1,17 +1,10 @@
 import { describe, it as test } from "@std/testing/bdd";
 import { expect } from "@std/expect";
 import { chunkIdToPath, generateChunkId } from "./chunk-id.ts";
-import {
-  basename,
-  dirname,
-  extname,
-  isValidPath,
-  normalizePath,
-} from "./path-utils.ts";
+import { basename, dirname, extname, isValidPath, normalizePath } from "./path-utils.ts";
 import { asChunkId, asFilePath } from "./branded.ts";
 
-const BASE58_REGEX =
-  /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
+const BASE58_REGEX = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/;
 
 describe("Phase 3: Chunk ID Generation & Path Utilities", () => {
   describe("generateChunkId()", () => {

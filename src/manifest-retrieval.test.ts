@@ -8,18 +8,12 @@ import {
   type StreamingFileInput,
   ValidationError,
 } from "./index.ts";
-import {
-  getBatchIdFromManifestBlob,
-  getManifest,
-} from "./manifest-retrieval.ts";
+import { getBatchIdFromManifestBlob, getManifest } from "./manifest-retrieval.ts";
 import { uploadBatch } from "./streaming-upload.ts";
 import { padManifestPlaintext } from "./manifest-padding.ts";
 import { RootManifestSchema } from "./gen/manifest_pb.ts";
 import { MANIFEST_VERSION_SUPPORTED } from "./constants.ts";
-import {
-  encryptVaultManifestRecord,
-  VAULT_BATCH_ID_SIZE,
-} from "./vault-aead.ts";
+import { encryptVaultManifestRecord, VAULT_BATCH_ID_SIZE } from "./vault-aead.ts";
 import { hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(1) as SymmetricKey;

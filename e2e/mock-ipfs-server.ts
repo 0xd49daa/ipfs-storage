@@ -1,8 +1,4 @@
-import {
-  computeDagPbCid,
-  computeRawCid,
-  MockIpfsClient,
-} from "../src/ipfs-client.ts";
+import { computeDagPbCid, computeRawCid, MockIpfsClient } from "../src/ipfs-client.ts";
 
 export interface MockIpfsServer {
   url: string;

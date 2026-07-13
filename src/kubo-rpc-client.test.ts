@@ -382,9 +382,7 @@ describe("KuboRpcClient", () => {
     const result = await client.uploadCar(asAsyncIterable([carBytes]));
 
     expect(result).toBe("");
-    const blockCalls = fake.calls.filter((item) =>
-      item.path.endsWith("/block/put")
-    );
+    const blockCalls = fake.calls.filter((item) => item.path.endsWith("/block/put"));
     expect(blockCalls).toHaveLength(2);
     expect(blockCalls[0]!.search.get("format")).toBe("raw");
     expect(blockCalls[0]!.search.get("allow-big-block")).toBe("true");

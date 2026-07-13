@@ -1,18 +1,11 @@
 import type { IpfsClient } from "../src/ipfs-client.ts";
 import { IpfsFetchError, IpfsUploadError } from "../src/ipfs-client.ts";
 import { afterAll, beforeAll } from "@std/testing/bdd";
-import {
-  type ContentHash,
-  hashContent,
-  type SymmetricKey,
-} from "../src/crypto-primitives.ts";
+import { type ContentHash, hashContent, type SymmetricKey } from "../src/crypto-primitives.ts";
 import { CarBufferReader } from "@ipld/car";
 import * as dagPb from "@ipld/dag-pb";
 import type { StreamingFileInput } from "../src/types.ts";
-import {
-  type MockIpfsServer,
-  startMockIpfsServer,
-} from "./mock-ipfs-server.ts";
+import { type MockIpfsServer, startMockIpfsServer } from "./mock-ipfs-server.ts";
 
 // ============================================================================
 // HttpIpfsClient Implementation
@@ -123,9 +116,7 @@ export class HttpIpfsClient implements IpfsClient {
   }
 
   async has(cid: string): Promise<boolean> {
-    const url = `${this.apiUrl}/api/v0/block/stat?arg=${
-      encodeURIComponent(cid)
-    }`;
+    const url = `${this.apiUrl}/api/v0/block/stat?arg=${encodeURIComponent(cid)}`;
     const res = await fetch(url, { method: "POST" });
     return res.ok;
   }
@@ -158,9 +149,7 @@ export async function createStreamingFileInput(
   path: string,
   created?: number,
 ): Promise<StreamingFileInput> {
-  const bytes = typeof data === "string"
-    ? new TextEncoder().encode(data)
-    : data;
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
   return {
     path,
     contentHash: await hashContent(bytes),

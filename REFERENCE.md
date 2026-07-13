@@ -2,10 +2,9 @@
 
 Complete API documentation for `@0xd49daa/ipfs-storage` `0.2.0`.
 
-The package is symmetric-only. It does not expose recipient lists, sender key
-pairs, X25519 keys, or key wrapping APIs. Callers provide `manifestKey` for
-upload, manifest retrieval, and download. Upload also requires a 16-byte
-`batch_id`.
+The package is symmetric-only. It does not expose recipient lists, sender key pairs, X25519 keys, or
+key wrapping APIs. Callers provide `manifestKey` for upload, manifest retrieval, and download.
+Upload also requires a 16-byte `batch_id`.
 
 ## Table of Contents
 
@@ -43,10 +42,7 @@ Returns: `IpfsStorageModule`.
 Throws: `ValidationError` if `config` is invalid.
 
 ```typescript
-import {
-  createIpfsStorageModule,
-  MockIpfsClient,
-} from "@0xd49daa/ipfs-storage";
+import { createIpfsStorageModule, MockIpfsClient } from "@0xd49daa/ipfs-storage";
 
 const storage = createIpfsStorageModule({
   ipfsClient: new MockIpfsClient(),
@@ -110,8 +106,8 @@ function uploadBatch(
 ): Promise<BatchResult>;
 ```
 
-Most consumers call `module.uploadBatch(files, options)` so `ipfsClient` is
-bound by `createIpfsStorageModule()`.
+Most consumers call `module.uploadBatch(files, options)` so `ipfsClient` is bound by
+`createIpfsStorageModule()`.
 
 Parameters:
 
@@ -122,13 +118,12 @@ Parameters:
 
 Returns: `Promise<BatchResult>`.
 
-Throws: `ValidationError` for invalid options, empty input, invalid paths, or
-invalid file metadata.
+Throws: `ValidationError` for invalid options, empty input, invalid paths, or invalid file metadata.
 
 ### StreamingFileInput
 
-Input for a file to upload. `getStream()` must return a fresh stream each time
-it is called because retries may re-read a file.
+Input for a file to upload. `getStream()` must return a fresh stream each time it is called because
+retries may re-read a file.
 
 ```typescript
 interface StreamingFileInput {
@@ -152,8 +147,8 @@ Fields:
 
 ### DirectoryInput
 
-Explicit directory declaration. Use this for empty directories or timestamp
-overrides for inferred directories.
+Explicit directory declaration. Use this for empty directories or timestamp overrides for inferred
+directories.
 
 ```typescript
 interface DirectoryInput {
@@ -236,8 +231,7 @@ interface UploadProgress {
 }
 ```
 
-For true lazy `AsyncIterable` inputs, `totalFiles` and `totalBytes` may be
-undefined.
+For true lazy `AsyncIterable` inputs, `totalFiles` and `totalBytes` may be undefined.
 
 ### ChunkUploadedInfo
 
@@ -287,10 +281,9 @@ Returns: `Promise<BatchManifest>`.
 
 Throws:
 
-- `ValidationError` for an empty CID, missing `manifestKey`, or invalid key
-  size.
-- `ManifestError` when the manifest cannot be fetched, decrypted, parsed, or has
-  an unsupported version.
+- `ValidationError` for an empty CID, missing `manifestKey`, or invalid key size.
+- `ManifestError` when the manifest cannot be fetched, decrypted, parsed, or has an unsupported
+  version.
 
 ### ReadOptions
 
@@ -323,16 +316,15 @@ Parses the plaintext `batch_id` locator prefix from a root manifest IPFS blob.
 function getBatchIdFromManifestBlob(blob: Uint8Array): Uint8Array;
 ```
 
-The returned value is the first 16 bytes of the blob. This function performs no
-decryption and does not authenticate the encrypted manifest record that follows
-the prefix.
+The returned value is the first 16 bytes of the blob. This function performs no decryption and does
+not authenticate the encrypted manifest record that follows the prefix.
 
 Throws `ValidationError` when the blob is shorter than 16 bytes.
 
 ### BatchManifest
 
-Decrypted batch manifest. It intentionally does not contain `manifestKey`; the
-caller already owns that key and must pass it again for downloads.
+Decrypted batch manifest. It intentionally does not contain `manifestKey`; the caller already owns
+that key and must pass it again for downloads.
 
 ```typescript
 interface BatchManifest {
@@ -380,9 +372,8 @@ interface ChunkRef {
 }
 ```
 
-`offset` and `encryptedLength` address the encrypted segment inside an IPFS
-chunk object. `length` is the original plaintext segment length after removing
-PADME padding.
+`offset` and `encryptedLength` address the encrypted segment inside an IPFS chunk object. `length`
+is the original plaintext segment length after removing PADME padding.
 
 ---
 
@@ -414,10 +405,10 @@ function downloadFile(
 
 Most consumers call `module.downloadFile(file, options)`.
 
-Without `output`, the function returns `AsyncIterable<Uint8Array>`. With
-`output: 'memory'`, it returns `Promise<Uint8Array>`. With a caller-owned
-`WritableStream`, decrypted bytes are written to that stream and the function
-returns `Promise<void>`; the stream is closed on success and aborted on failure.
+Without `output`, the function returns `AsyncIterable<Uint8Array>`. With `output: 'memory'`, it
+returns `Promise<Uint8Array>`. With a caller-owned `WritableStream`, decrypted bytes are written to
+that stream and the function returns `Promise<void>`; the stream is closed on success and aborted on
+failure.
 
 Throws:
 
@@ -428,10 +419,9 @@ Throws:
 
 ### downloadFiles(files, options)
 
-Downloads and decrypts multiple files sequentially as a convenience API. For
-large files, prefer `downloadFile()` with a caller-owned `WritableStream`
-because `downloadFiles()` yields each `DownloadedFile` after that file has
-completed.
+Downloads and decrypts multiple files sequentially as a convenience API. For large files, prefer
+`downloadFile()` with a caller-owned `WritableStream` because `downloadFiles()` yields each
+`DownloadedFile` after that file has completed.
 
 ```typescript
 function downloadFiles(
@@ -501,8 +491,8 @@ interface DownloadFilesOptions {
 }
 ```
 
-`concurrency` is deprecated and ignored. Files are downloaded sequentially;
-chunk-level parallelism is controlled by `chunkConcurrency`.
+`concurrency` is deprecated and ignored. Files are downloaded sequentially; chunk-level parallelism
+is controlled by `chunkConcurrency`.
 
 ### DownloadedFile
 
@@ -541,9 +531,8 @@ interface MultiDownloadProgress {
 
 ### Manifest Version
 
-The package exports `MANIFEST_VERSION_SUPPORTED`. The current value is `1`.
-Uploads write this value and manifest retrieval rejects unsupported encrypted
-manifest versions.
+The package exports `MANIFEST_VERSION_SUPPORTED`. The current value is `1`. Uploads write this value
+and manifest retrieval rejects unsupported encrypted manifest versions.
 
 ```typescript
 import { MANIFEST_VERSION_SUPPORTED } from "@0xd49daa/ipfs-storage";
@@ -557,17 +546,15 @@ The root manifest is stored at `/m`. Its blob format is:
 batch_id(16) | encrypted_root_manifest_aead_record
 ```
 
-The `batch_id` prefix is plaintext so consumers can identify the batch locator
-before decrypting. The encrypted record still authenticates `batch_id` in AAD;
-tampering with the prefix causes decryption failure.
+The `batch_id` prefix is plaintext so consumers can identify the batch locator before decrypting.
+The encrypted record still authenticates `batch_id` in AAD; tampering with the prefix causes
+decryption failure.
 
-Sub-manifest blobs do not include this prefix; they are stored directly as AEAD
-records.
+Sub-manifest blobs do not include this prefix; they are stored directly as AEAD records.
 
 ### Canonical AEAD Record
 
-Chunks, root manifests after the prefix, and sub-manifests use this record
-layout:
+Chunks, root manifests after the prefix, and sub-manifests use this record layout:
 
 ```text
 version(1) | key_scope(1) | nonce(12) | ciphertext | tag(16)
@@ -585,20 +572,17 @@ Supported values:
 | Manifest key size   | 32 bytes |
 | Batch id size       | 16 bytes |
 
-Manifest AAD contains `version`, manifest key scope, `batch_id`, and
-`manifest_node_id`. Root manifest node id is `0`; sub-manifests use sequential
-ids starting at `1`.
+Manifest AAD contains `version`, manifest key scope, `batch_id`, and `manifest_node_id`. Root
+manifest node id is `0`; sub-manifests use sequential ids starting at `1`.
 
-Chunk AAD contains `version`, chunk key scope, `batch_id`, file path hash, and
-chunk index. Chunk file keys are derived from `manifestKey` and the file path
-hash.
+Chunk AAD contains `version`, chunk key scope, `batch_id`, file path hash, and chunk index. Chunk
+file keys are derived from `manifestKey` and the file path hash.
 
 ### Plaintext Handling
 
-The library never writes plaintext files, OPFS caches, or temporary decrypted
-files. Decrypted bytes are returned to the caller as an async iterable,
-collected into memory with `output: 'memory'`, or written to the caller-supplied
-`WritableStream` in `DownloadOptions.output`.
+The library never writes plaintext files, OPFS caches, or temporary decrypted files. Decrypted bytes
+are returned to the caller as an async iterable, collected into memory with `output: 'memory'`, or
+written to the caller-supplied `WritableStream` in `DownloadOptions.output`.
 
 ---
 
@@ -644,8 +628,7 @@ class ValidationError extends IpfsStorageError {}
 
 ### IntegrityError
 
-Thrown when downloaded plaintext does not match the expected content hash in
-strict integrity mode.
+Thrown when downloaded plaintext does not match the expected content hash in strict integrity mode.
 
 ```typescript
 class IntegrityError extends IpfsStorageError {
@@ -657,8 +640,7 @@ class IntegrityError extends IpfsStorageError {
 
 ### ManifestError
 
-Thrown for manifest retrieval, decryption, parsing, or unsupported version
-failures.
+Thrown for manifest retrieval, decryption, parsing, or unsupported version failures.
 
 ```typescript
 class ManifestError extends IpfsStorageError {
@@ -700,8 +682,7 @@ class CidMismatchError extends IpfsStorageError {
 
 ### IpfsUploadError
 
-Thrown when an `IpfsClient` upload fails, including Kubo RPC upload failures and
-invalid CAR input.
+Thrown when an `IpfsClient` upload fails, including Kubo RPC upload failures and invalid CAR input.
 
 ```typescript
 class IpfsUploadError extends IpfsStorageError {}
@@ -731,8 +712,8 @@ enum ChunkEncryption {
 }
 ```
 
-The current Vault AEAD implementation emits `SINGLE_SHOT` records for encrypted
-segments. The enum remains part of the manifest type surface.
+The current Vault AEAD implementation emits `SINGLE_SHOT` records for encrypted segments. The enum
+remains part of the manifest type surface.
 
 ### DownloadOutput
 
@@ -759,10 +740,9 @@ function hashContent(bytes: Uint8Array): Promise<ContentHash>;
 function asContentHash(bytes: Uint8Array): ContentHash;
 ```
 
-`asAsyncIterable()` converts an in-memory iterable to an async iterable for
-tests, examples, and small inputs. `hashContent()` computes the content hash
-format accepted by this package without exposing the concrete algorithm in the
-public API name.
+`asAsyncIterable()` converts an in-memory iterable to an async iterable for tests, examples, and
+small inputs. `hashContent()` computes the content hash format accepted by this package without
+exposing the concrete algorithm in the public API name.
 
 ---
 
@@ -775,8 +755,7 @@ export { asContentHash, hashContent } from "@0xd49daa/ipfs-storage";
 export type { ContentHash, SymmetricKey } from "@0xd49daa/ipfs-storage";
 ```
 
-Asymmetric key pair and public/private key types are not re-exported by this
-package.
+Asymmetric key pair and public/private key types are not re-exported by this package.
 
 ---
 
@@ -839,10 +818,10 @@ interface KuboRpcClientOptions {
 }
 ```
 
-`baseUrl` defaults to `http://127.0.0.1:5001`. Rooted CARs are uploaded through
-Kubo `/api/v0/dag/import`; rootless CAR blocks are uploaded through
-`/api/v0/block/put`. Returned CIDs are verified against the CAR contents and a
-`CidMismatchError` is thrown if Kubo returns an unexpected CID.
+`baseUrl` defaults to `http://127.0.0.1:5001`. Rooted CARs are uploaded through Kubo
+`/api/v0/dag/import`; rootless CAR blocks are uploaded through `/api/v0/block/put`. Returned CIDs
+are verified against the CAR contents and a `CidMismatchError` is thrown if Kubo returns an
+unexpected CID.
 
-Browser callers must configure Kubo CORS for the application origin. The Kubo
-RPC API is an admin interface and should stay bound to localhost.
+Browser callers must configure Kubo CORS for the application origin. The Kubo RPC API is an admin
+interface and should stay bound to localhost.

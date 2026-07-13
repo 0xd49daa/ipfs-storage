@@ -3,11 +3,7 @@ import * as dagPb from "@ipld/dag-pb";
 import * as raw from "multiformats/codecs/raw";
 import type { KuboRPCClient as OfficialKuboRpcClient } from "kubo-rpc-client";
 import { CidMismatchError } from "./errors.ts";
-import {
-  type IpfsClient,
-  IpfsFetchError,
-  IpfsUploadError,
-} from "./ipfs-client.ts";
+import { type IpfsClient, IpfsFetchError, IpfsUploadError } from "./ipfs-client.ts";
 
 export const DEFAULT_KUBO_RPC_URL = "http://127.0.0.1:5001";
 
@@ -54,6 +50,29 @@ function blockPutFormatForCodec(codec: number): string {
 function buildIpfsPath(cid: string, path?: string): string {
   if (!path || path === "/") return cid;
   return `${cid}/${path.replace(/^\/+/, "")}`;
+}
+
+function multipartBody(name: string, fileName: string, bytes: Uint8Array) {
+  const boundary = `----ipfs-storage-${crypto.randomUUID()}`;
+  const encoder = new TextEncoder();
+  const prefix = encoder.encode(
+    `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+  );
+  const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
+  const body = new Uint8Array(prefix.length + bytes.length + suffix.length);
+  body.set(prefix, 0);
+  body.set(bytes, prefix.length);
+  body.set(suffix, prefix.length + bytes.length);
+  return { body, contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
+function mergeHeaders(
+  headers: Headers | Record<string, string> | undefined,
+  extra: Record<string, string>,
+): Headers {
+  const merged = new Headers(headers);
+  for (const [key, value] of Object.entries(extra)) merged.set(key, value);
+  return merged;
 }
 
 /**
@@ -111,20 +130,9 @@ export class KuboRpcClient implements IpfsClient {
     expectedRootCid: string,
   ): Promise<string> {
     try {
-      let returnedRootCid: string | undefined;
-      const client = await this.getClient();
-      for await (
-        const result of client.dag.import([carBytes], {
-          pinRoots: false,
-        })
-      ) {
-        returnedRootCid = result.root.cid.toString();
-        break;
-      }
+      const returnedRootCid = await this.importDag(carBytes);
 
-      if (!returnedRootCid) {
-        throw new IpfsUploadError("Kubo dag.import returned no root CID");
-      }
+      if (!returnedRootCid) return expectedRootCid;
       if (returnedRootCid !== expectedRootCid) {
         throw new CidMismatchError(expectedRootCid, returnedRootCid);
       }
@@ -146,13 +154,7 @@ export class KuboRpcClient implements IpfsClient {
       const format = blockPutFormatForCodec(block.cid.code);
 
       try {
-        const client = await this.getClient();
-        const returnedCid = await client.block.put(block.bytes, {
-          format,
-          allowBigBlock: true,
-          pin: false,
-        });
-        const actualCid = returnedCid.toString();
+        const actualCid = await this.putBlock(new Uint8Array(block.bytes), format);
         if (actualCid !== expectedCid) {
           throw new CidMismatchError(expectedCid, actualCid);
         }
@@ -167,6 +169,33 @@ export class KuboRpcClient implements IpfsClient {
     }
 
     return "";
+  }
+
+  private async importDag(carBytes: Uint8Array): Promise<string | undefined> {
+    const url = new URL("/api/v0/dag/import", this.options.baseUrl ?? DEFAULT_KUBO_RPC_URL);
+    url.searchParams.set("pin-roots", "false");
+
+    const { body, contentType } = multipartBody("file", "batch.car", carBytes);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: mergeHeaders(this.options.headers, { "content-type": contentType }),
+      body,
+    });
+    if (!response.ok) {
+      throw new IpfsUploadError(`Kubo dag.import failed with HTTP ${response.status}`);
+    }
+
+    for (const line of (await response.text()).split("\n")) {
+      if (line.trim().length === 0) continue;
+      const item = JSON.parse(line) as {
+        Root?: { Cid?: { "/"?: unknown }; "/"?: unknown } | string;
+      };
+      if (typeof item.Root === "string") return item.Root;
+      const cid = item.Root?.Cid?.["/"] ?? item.Root?.["/"];
+      if (typeof cid === "string") return cid;
+    }
+    return undefined;
   }
 
   private getModule(): Promise<KuboRpcClientModule> {
@@ -187,5 +216,29 @@ export class KuboRpcClient implements IpfsClient {
       );
     }
     return await this.clientPromise;
+  }
+
+  private async putBlock(bytes: Uint8Array, format: string): Promise<string> {
+    const url = new URL("/api/v0/block/put", this.options.baseUrl ?? DEFAULT_KUBO_RPC_URL);
+    url.searchParams.set("format", format);
+    url.searchParams.set("allow-big-block", "true");
+    url.searchParams.set("pin", "false");
+
+    const { body, contentType } = multipartBody("file", "block", bytes);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: mergeHeaders(this.options.headers, { "content-type": contentType }),
+      body,
+    });
+    if (!response.ok) {
+      throw new IpfsUploadError(`Kubo block.put failed with HTTP ${response.status}`);
+    }
+
+    const result = await response.json() as { Key?: unknown };
+    if (typeof result.Key !== "string" || result.Key.length === 0) {
+      throw new IpfsUploadError("Kubo block.put returned no CID");
+    }
+    return result.Key;
   }
 }

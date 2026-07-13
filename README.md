@@ -2,26 +2,24 @@
 
 [![JSR](https://jsr.io/badges/@0xd49daa/ipfs-storage)](https://jsr.io/@0xd49daa/ipfs-storage)
 
-Browser-first TypeScript library for IPFS-based encrypted batch storage. The
-current package is symmetric-only: callers provide a 32-byte `manifestKey` and a
-16-byte `batch_id`; the package encrypts chunks and manifests before upload and
-never performs recipient key wrapping.
+Browser-first TypeScript library for IPFS-based encrypted batch storage. The current package is
+symmetric-only: callers provide a 32-byte `manifestKey` and a 16-byte `batch_id`; the package
+encrypts chunks and manifests before upload and never performs recipient key wrapping.
 
 ## Features
 
-- **Symmetric-only API** — Upload, manifest retrieval, and download all use a
-  caller-owned `manifestKey`.
-- **Vault v0.34 wire format** — Chunks and manifests are encoded as canonical
-  AES-GCM AEAD records with Vault-compatible AAD.
+- **Symmetric-only API** — Upload, manifest retrieval, and download all use a caller-owned
+  `manifestKey`.
+- **Vault v0.34 wire format** — Chunks and manifests are encoded as canonical AES-GCM AEAD records
+  with Vault-compatible AAD.
 - **Streaming upload and download** — Handles large files with bounded memory.
-- **Kubo RPC client adapter** — Connects the package `IpfsClient` contract to
-  the official `kubo-rpc-client` package for local Kubo RPC uploads.
-- **Protocol Buffers** — Compact manifest encoding with explicit manifest
-  version support.
+- **Kubo RPC client adapter** — Connects the package `IpfsClient` contract to the official
+  `kubo-rpc-client` package for local Kubo RPC uploads.
+- **Protocol Buffers** — Compact manifest encoding with explicit manifest version support.
 - **PADME padding** — Pads chunk and manifest plaintext before encryption.
 - **Abort support** — Cancel operations with `AbortSignal`.
-- **No plaintext at rest** — The library does not write decrypted files, OPFS
-  caches, or temporary plaintext storage.
+- **No plaintext at rest** — The library does not write decrypted files, OPFS caches, or temporary
+  plaintext storage.
 
 ## Installation
 
@@ -97,9 +95,8 @@ See [REFERENCE.md](./REFERENCE.md) for complete API documentation.
 
 ## Kubo RPC Client
 
-`KuboRpcClient` adapts the official `kubo-rpc-client` package to this package's
-`IpfsClient` interface. It defaults to local Kubo RPC at
-`http://127.0.0.1:5001`.
+`KuboRpcClient` adapts the official `kubo-rpc-client` package to this package's `IpfsClient`
+interface. It defaults to local Kubo RPC at `http://127.0.0.1:5001`.
 
 ```typescript
 import { createIpfsStorageModule, KuboRpcClient } from "@0xd49daa/ipfs-storage";
@@ -109,36 +106,34 @@ const storage = createIpfsStorageModule({
 });
 ```
 
-Browser callers must configure Kubo CORS for the app origin. The Kubo RPC API is
-an admin interface; keep it bound to localhost and do not expose it to the
-public internet.
+Browser callers must configure Kubo CORS for the app origin. The Kubo RPC API is an admin interface;
+keep it bound to localhost and do not expose it to the public internet.
 
-Rooted CAR uploads are imported with `/api/v0/dag/import`; rootless CAR blocks
-are stored with `/api/v0/block/put`. Returned CIDs are checked against the CAR
-contents and `CidMismatchError` is thrown on mismatch.
+Rooted CAR uploads are imported with `/api/v0/dag/import`; rootless CAR blocks are stored with
+`/api/v0/block/put`. Returned CIDs are checked against the CAR contents and `CidMismatchError` is
+thrown on mismatch.
 
 ## Symmetric Keys
 
-`manifestKey` is a caller-owned 32-byte AES-256 key. The package does not derive
-it from a mnemonic, wrap it for recipients, or store it in the manifest. Vault
-or another consumer is responsible for deriving, storing, or sharing this key.
+`manifestKey` is a caller-owned 32-byte AES-256 key. The package does not derive it from a mnemonic,
+wrap it for recipients, or store it in the manifest. Vault or another consumer is responsible for
+deriving, storing, or sharing this key.
 
-`batch_id` is a caller-owned 16-byte random value. It is used as a Vault locator
-and as part of AEAD additional authenticated data. Generate a fresh `batch_id`
-for each uploaded batch.
+`batch_id` is a caller-owned 16-byte random value. It is used as a Vault locator and as part of AEAD
+additional authenticated data. Generate a fresh `batch_id` for each uploaded batch.
 
 ## Content Hashes
 
-Use `hashContent()` to compute `StreamingFileInput.contentHash`. The helper name
-intentionally does not expose the underlying algorithm; callers should treat the
-exact content hash format as owned by this package.
+Use `hashContent()` to compute `StreamingFileInput.contentHash`. The helper name intentionally does
+not expose the underlying algorithm; callers should treat the exact content hash format as owned by
+this package.
 
 ## Wire Format Notes
 
-The root manifest is stored at `/m` under the batch root. Its IPFS blob starts
-with the plaintext 16-byte `batch_id` locator prefix, followed by the encrypted
-root manifest AEAD record. `getBatchIdFromManifestBlob()` parses only this
-prefix; it does not decrypt or authenticate the remaining bytes.
+The root manifest is stored at `/m` under the batch root. Its IPFS blob starts with the plaintext
+16-byte `batch_id` locator prefix, followed by the encrypted root manifest AEAD record.
+`getBatchIdFromManifestBlob()` parses only this prefix; it does not decrypt or authenticate the
+remaining bytes.
 
 Chunks and manifests use the canonical Vault AEAD record layout:
 
@@ -153,27 +148,24 @@ Supported key scopes are:
 | Chunk    | `0x04` | Encrypted file chunk records            |
 | Manifest | `0x05` | Encrypted root and sub-manifest records |
 
-Manifest records use the `manifestKey` directly. Chunk records use file-scoped
-keys derived from the `manifestKey` and the file path hash. AEAD AAD binds the
-record version, key scope, `batch_id`, and the relevant chunk or manifest node
-identity. This README intentionally summarizes the consumer-facing behavior; the
-normative format remains Vault Spec v0.34.
+Manifest records use the `manifestKey` directly. Chunk records use file-scoped keys derived from the
+`manifestKey` and the file path hash. AEAD AAD binds the record version, key scope, `batch_id`, and
+the relevant chunk or manifest node identity. This README intentionally summarizes the
+consumer-facing behavior; the normative format remains Vault Spec v0.34.
 
 ## Manifest Versions
 
 The package currently supports manifest schema version `1`, exported as
-`MANIFEST_VERSION_SUPPORTED`. Uploads write this version and manifest retrieval
-rejects unsupported encrypted manifest versions.
+`MANIFEST_VERSION_SUPPORTED`. Uploads write this version and manifest retrieval rejects unsupported
+encrypted manifest versions.
 
 ## Plaintext Handling
 
-The library encrypts data before upload and decrypts data only into caller-owned
-streams. It never writes plaintext files, OPFS caches, or temporary decrypted
-files. `downloadFile()` yields plaintext chunks as an
-`AsyncIterable<Uint8Array>` by default, returns a `Uint8Array` when
-`output: 'memory'` is set, or writes to a caller-supplied
-`WritableStream<Uint8Array>`. Writable streams are closed on success and aborted
-on failure. If that stream is persistent, plaintext persistence is controlled by
+The library encrypts data before upload and decrypts data only into caller-owned streams. It never
+writes plaintext files, OPFS caches, or temporary decrypted files. `downloadFile()` yields plaintext
+chunks as an `AsyncIterable<Uint8Array>` by default, returns a `Uint8Array` when `output: 'memory'`
+is set, or writes to a caller-supplied `WritableStream<Uint8Array>`. Writable streams are closed on
+success and aborted on failure. If that stream is persistent, plaintext persistence is controlled by
 the caller.
 
 ## Error Handling
@@ -188,8 +180,7 @@ the caller.
 | `IpfsFetchError`        | Kubo RPC fetch failed                                                            |
 | `CidMismatchError`      | CID verification failed                                                          |
 
-All errors extend `IpfsStorageError`. See [REFERENCE.md](./REFERENCE.md) for
-details.
+All errors extend `IpfsStorageError`. See [REFERENCE.md](./REFERENCE.md) for details.
 
 ## Testing
 
@@ -241,8 +232,8 @@ Key design decisions:
 
 ## Migration Notes
 
-Version `0.2.0` removes the previously documented asymmetric recipient model.
-See [MIGRATION.md](./MIGRATION.md) for the migration checklist.
+Version `0.2.0` removes the previously documented asymmetric recipient model. See
+[MIGRATION.md](./MIGRATION.md) for the migration checklist.
 
 ## License
 

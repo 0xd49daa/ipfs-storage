@@ -48,8 +48,7 @@ describe("Phase 1: Serialization", () => {
             chunks: [
               {
                 chunkId: "6Bv7HnWcL4mT9Rp2QsXx3a",
-                cid:
-                  "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+                cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
                 offset: 0,
                 length: 1024 * 1024,
                 encryption: ChunkEncryption.SINGLE_SHOT,
@@ -324,8 +323,7 @@ describe("Phase 1: Serialization", () => {
           chunks: [
             {
               chunkId: `id${i.toString().padStart(18, "0")}`,
-              cid:
-                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+              cid: "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
               offset: 0,
               length: 100,
               encryption: ChunkEncryption.SINGLE_SHOT,

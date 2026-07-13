@@ -187,9 +187,7 @@ export function parseVaultAeadRecord(record: Uint8Array): VaultAeadRecord {
   const version = record[0]!;
   if (version !== VAULT_AEAD_VERSION) {
     throw new VaultAeadError(
-      `Unsupported AEAD record version 0x${
-        version.toString(16).padStart(2, "0")
-      }`,
+      `Unsupported AEAD record version 0x${version.toString(16).padStart(2, "0")}`,
     );
   }
 

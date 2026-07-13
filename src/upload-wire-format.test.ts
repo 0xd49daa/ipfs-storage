@@ -15,11 +15,7 @@ import {
   VAULT_KEY_SCOPE_CHUNK,
   VAULT_KEY_SCOPE_MANIFEST,
 } from "./vault-aead.ts";
-import {
-  type ContentHash,
-  hashContent,
-  type SymmetricKey,
-} from "./crypto-primitives.ts";
+import { type ContentHash, hashContent, type SymmetricKey } from "./crypto-primitives.ts";
 
 const manifestKey = new Uint8Array(32).fill(0x11) as SymmetricKey;
 const VAULT_RECORD_OVERHEAD = 2 + VAULT_AEAD_NONCE_SIZE + VAULT_AEAD_TAG_SIZE;
